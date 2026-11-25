@@ -1,0 +1,3011 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SKY-GUARD — AI 자율 비행 드론 임무 수행 시스템</title>
+  <meta name="description" content="실사 배경 3D 비행 시뮬레이션, 주변 환경 인식, A* 자율 경로 탐색, 비행 성능 분석 및 임무 최적화를 통합한 자율 비행 드론 관제 플랫폼." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <style>
+    :root {
+      --bg-base: #070A12;
+      --bg-panel: #0A0F1C;
+      --bg-card: #0D1321;
+      --bg-input: #060911;
+      --border: #1E293B;
+      --border-soft: rgba(30, 41, 59, 0.78);
+      --text-main: #F1F5F9;
+      --text-sub: #CBD5E1;
+      --text-muted: #94A3B8;
+      --text-dim: #64748B;
+      --cyan: #06B6D4;
+      --cyan-bright: #22D3EE;
+      --blue: #3B82F6;
+      --emerald: #10B981;
+      --amber: #F59E0B;
+      --rose: #F43F5E;
+      --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --font-display: 'Chakra Petch', 'Plus Jakarta Sans', sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg-base);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input, select { font-family: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible, select:focus-visible {
+      outline: 2px solid var(--cyan);
+      outline-offset: 2px;
+    }
+    .font-display { font-family: var(--font-display); }
+    .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .app-shell { display: flex; min-height: 100vh; width: 100%; }
+
+    /* Sidebar */
+    .sidebar {
+      width: 264px;
+      flex-shrink: 0;
+      background: var(--bg-panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      z-index: 40;
+      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .brand-bar {
+      height: 56px;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .brand-lockup {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      white-space: nowrap;
+    }
+    .brand-title {
+      font-family: var(--font-display);
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: #F8FAFC;
+    }
+    .sector-box {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+    .sector-kicker { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: var(--cyan-bright); }
+    .sector-name { margin-top: 4px; font-weight: 600; color: var(--text-main); display: flex; align-items: center; gap: 6px; }
+    .sector-meta { margin-top: 3px; font-size: 11px; color: var(--text-muted); }
+
+    .nav-list { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
+    .nav-btn {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-sub);
+      text-align: left;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .nav-btn:hover { background: rgba(30, 41, 59, 0.55); color: #fff; }
+    .nav-btn.active {
+      background: rgba(6, 182, 212, 0.14);
+      border-color: rgba(6, 182, 212, 0.42);
+      color: #67E8F9;
+    }
+    .nav-icon { color: var(--text-muted); flex-shrink: 0; display: flex; }
+    .nav-btn.active .nav-icon { color: var(--cyan-bright); }
+    .nav-label { font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+    .nav-sub { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .sidebar-footer {
+      border-top: 1px solid var(--border);
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-size: 12px;
+    }
+    .stat-row { display: flex; justify-content: space-between; align-items: center; color: var(--text-muted); }
+    .btn-download-html {
+      margin-top: 6px;
+      width: 100%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 9px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(6, 182, 212, 0.48);
+      background: rgba(6, 182, 212, 0.12);
+      color: #67E8F9;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      transition: background 0.15s;
+    }
+    .btn-download-html:hover { background: rgba(6, 182, 212, 0.22); }
+
+    /* Main Content */
+    .main-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .topbar {
+      height: 56px;
+      padding: 0 24px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(10, 15, 28, 0.92);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .topbar-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .breadcrumb { font-size: 13.5px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .breadcrumb strong { color: #F8FAFC; font-weight: 600; }
+    .topbar-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+    .mobile-menu-btn {
+      display: none;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-sub);
+      border-radius: 6px;
+      padding: 6px;
+    }
+    .mobile-close-btn { display: none; background: transparent; border: none; color: var(--text-muted); padding: 4px; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      color: var(--text-sub);
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+    .btn:hover { border-color: rgba(6, 182, 212, 0.55); color: #67E8F9; }
+    .btn-primary {
+      background: var(--cyan);
+      border-color: var(--cyan);
+      color: #020617;
+    }
+    .btn-primary:hover { background: var(--cyan-bright); border-color: var(--cyan-bright); color: #020617; }
+    .btn-amber { background: rgba(245, 158, 11, 0.14); border-color: rgba(245, 158, 11, 0.5); color: #FCD34D; }
+    .btn-rose { background: rgba(244, 63, 94, 0.14); border-color: rgba(244, 63, 94, 0.5); color: #FDA4AF; }
+    .btn-emerald { background: rgba(16, 185, 129, 0.14); border-color: rgba(16, 185, 129, 0.5); color: #6EE7B7; }
+    .btn-sm { padding: 6px 10px; font-size: 11.5px; }
+    .btn.active-seg { background: rgba(6, 182, 212, 0.18); border-color: var(--cyan); color: #67E8F9; }
+
+    .toast {
+      margin: 14px 24px 0;
+      padding: 10px 16px;
+      border-radius: 8px;
+      border: 1px solid rgba(6, 182, 212, 0.5);
+      background: rgba(8, 51, 68, 0.55);
+      color: #A5F3FC;
+      font-size: 12.5px;
+      font-weight: 500;
+      display: none;
+    }
+    .toast.show { display: block; }
+
+    .viewport { flex: 1; padding: 20px 24px 32px; }
+    .section-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+    .section-kicker { font-size: 12px; font-weight: 600; color: var(--cyan-bright); margin: 0; }
+    .section-title { font-size: 22px; font-weight: 700; color: #F8FAFC; margin: 4px 0 0; letter-spacing: -0.01em; text-wrap: balance; }
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px;
+    }
+    .card-dark {
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+    }
+    .grid { display: grid; gap: 16px; }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .grid-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .grid-12 { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+    .col-4 { grid-column: span 4; }
+    .col-5 { grid-column: span 5; }
+    .col-7 { grid-column: span 7; }
+    .col-8 { grid-column: span 8; }
+    .col-12 { grid-column: span 12; }
+
+    /* Simulator 3D Stage */
+    .sector-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
+    .sector-card {
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      color: var(--text-sub);
+      text-align: left;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .sector-card:hover { border-color: #334155; }
+    .sector-card.active { border-color: var(--cyan); background: rgba(6, 182, 212, 0.1); color: #F8FAFC; }
+
+    .sim-stage-wrap {
+      position: relative;
+      height: 580px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: #0B1220;
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+    #sim-canvas-mount { width: 100%; height: 100%; }
+    .sim-hud-top {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .hud-glass {
+      pointer-events: auto;
+      background: rgba(7, 10, 18, 0.84);
+      border: 1px solid rgba(51, 65, 85, 0.85);
+      border-radius: 8px;
+      padding: 7px 12px;
+      font-size: 12px;
+      color: #F1F5F9;
+    }
+    .hud-telemetry-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      align-items: center;
+    }
+    .sim-hud-bottom {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 10px;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .hud-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 11px; color: #E2E8F0; }
+    .hud-dot { display: inline-block; width: 8px; height: 8px; border-radius: 99px; margin-right: 4px; }
+
+    /* Forms & Tables */
+    label.field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--text-sub); }
+    input[type="number"], input[type="text"], select {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      border-radius: 6px;
+      padding: 7px 10px;
+      font-size: 12.5px;
+      width: 100%;
+    }
+    input[type="range"] { width: 100%; accent-color: var(--cyan); }
+    table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+    th { color: var(--text-muted); font-weight: 600; font-size: 11.5px; }
+
+    .tactical-wrap {
+      background: #060911;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      overflow: hidden;
+    }
+    .tactical-svg { width: 100%; height: auto; display: block; border-radius: 6px; touch-action: none; }
+    .vision-stage {
+      position: relative;
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      background: #060911;
+    }
+    .vision-stage img { display: block; width: 100%; height: auto; max-height: 420px; object-fit: contain; }
+    .vision-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: auto; }
+
+    .text-cyan { color: var(--cyan-bright); }
+    .text-emerald { color: #34D399; }
+    .text-amber { color: #FBBF24; }
+    .text-rose { color: #FB7185; }
+    .text-muted { color: var(--text-muted); }
+    .progress-track { width: 100%; height: 8px; background: #1E293B; border-radius: 99px; overflow: hidden; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, var(--cyan), var(--blue)); transition: width 0.2s; }
+
+    @media (max-width: 1100px) {
+      .grid-5 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .grid-4, .sector-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .grid-12 { grid-template-columns: 1fr; }
+      .col-4, .col-5, .col-7, .col-8, .col-12 { grid-column: span 1; }
+    }
+    @media (max-width: 860px) {
+      .sidebar { position: fixed; left: 0; top: 0; transform: translateX(-100%); }
+      .sidebar.open { transform: translateX(0); }
+      .mobile-menu-btn, .mobile-close-btn { display: inline-flex; }
+      .grid-2, .grid-3, .grid-4, .grid-5, .sector-grid { grid-template-columns: 1fr; }
+      .sim-stage-wrap { height: 460px; }
+      .viewport { padding: 14px; }
+    }
+  </style>
+<script src="/_aistudio-iframe.js?v=29045eb3"></script></head>
+<body>
+  <div class="app-shell">
+    <aside id="sidebar" class="sidebar">
+      <div class="brand-bar">
+        <div class="brand-lockup">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22D3EE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <span class="brand-title">SKY-GUARD</span>
+        </div>
+        <button id="mobile-close-btn" class="mobile-close-btn" aria-label="메뉴 닫기">✕</button>
+      </div>
+
+      <div class="sector-box">
+        <div class="sector-kicker">ACTIVE REAL-WORLD SECTOR</div>
+        <div id="sb-sector-name" class="sector-name">여의도 한강공원 회랑</div>
+        <div id="sb-sector-meta" class="sector-meta mono">풍속 5.5 m/s · 고도 48 m</div>
+      </div>
+
+      <nav id="nav-list" class="nav-list"></nav>
+
+      <div class="sidebar-footer">
+        <div class="stat-row"><span>시뮬 상태</span><strong id="sb-mode" class="mono text-emerald">STANDBY</strong></div>
+        <div class="stat-row"><span>경로 거리</span><strong id="sb-dist" class="mono">0 m</strong></div>
+        <div class="stat-row"><span>배터리 잔량</span><strong id="sb-batt" class="mono text-cyan">92 %</strong></div>
+        <div class="stat-row"><span>감지 장애물</span><strong id="sb-obs" class="mono text-amber">0 개</strong></div>
+        <button id="btn-download-html" class="btn-download-html">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          index.html 파일 다운로드
+        </button>
+      </div>
+    </aside>
+
+    <div class="main-col">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button id="mobile-menu-btn" class="mobile-menu-btn" aria-label="메뉴 열기">☰</button>
+          <div class="breadcrumb">
+            SKY-GUARD / <strong id="top-section-label">Flight Simulator</strong>
+            <span id="top-sector-label" class="text-muted"> · 여의도 한강공원 회랑</span>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <button id="btn-back-sim" class="btn btn-primary" style="display:none;">시뮬레이터 복귀</button>
+          <button id="btn-reset-mission" class="btn">공역 초기화</button>
+        </div>
+      </header>
+
+      <div id="toast-box" class="toast"></div>
+      <main id="app-viewport" class="viewport"></main>
+    </div>
+  </div>
+<script>
+(function () {
+  "use strict";
+
+  // Capture pristine static HTML before any JS mutates the DOM so standalone download works even on file://
+  var PRISTINE_HTML_SNAPSHOT = "<!doctype html>\n" + document.documentElement.outerHTML;
+
+  var GRID_COLS = 30;
+  var GRID_ROWS = 20;
+  var CELL_SIZE_M = 20; // 600m x 400m airspace
+
+  var CATEGORY_LABELS = {
+    building: "건물/구조물",
+    tree: "수목/가로수",
+    powerline: "전선/송전탑",
+    person: "보행자/인원",
+    vehicle: "차량/중장비",
+    other: "기타 장애물"
+  };
+
+  var RISK_LABELS = { low: "낮음", medium: "주의", high: "위험" };
+
+  var NAV_ITEMS = [
+    { id: "simulator", label: "Flight Simulator", subtitle: "실시간 3D 실사 비행 관제" },
+    { id: "environment", label: "Environment Analysis", subtitle: "주변 환경 장애물 인식" },
+    { id: "planning", label: "Flight Planning", subtitle: "자율 경로 · 성능 설계" },
+    { id: "control", label: "Autonomous Control", subtitle: "상황 판단 · 자율 대응" },
+    { id: "optimization", label: "Mission Optimization", subtitle: "다중 경로 임무 최적화" },
+    { id: "dashboard", label: "Dashboard", subtitle: "전체 상태 · 임무 요약" }
+  ];
+
+  var REAL_WORLD_SECTORS = [
+    {
+      id: "yeouido-hanriver",
+      name: "여의도 한강공원 회랑",
+      regionLabel: "서울특별시 영등포구 여의도동",
+      description: "한강 수변 공원, 마포대교 접근로, 강변도로 이동 차량 및 고층 빌딩이 공존하는 수변 드론 비행 회랑",
+      theme: "riverfront",
+      defaultWindMs: 5.5,
+      defaultWindDirDeg: 255,
+      defaultAltitudeM: 48,
+      start: { x: 2, y: 16 },
+      goal: { x: 27, y: 4 },
+      obstacles: [
+        { id: "yw-obs-1", name: "여의도 금융 빌딩 타워", category: "building", x: 8, y: 13, radius: 1.6, heightM: 82, riskLevel: "high", source: "manual" },
+        { id: "yw-obs-2", name: "마포대교 남단 조명 철탑", category: "powerline", x: 14, y: 8, radius: 1.35, heightM: 52, riskLevel: "high", source: "manual" },
+        { id: "yw-obs-3", name: "한강공원 버드나무 군락", category: "tree", x: 11, y: 5, radius: 1.25, heightM: 22, riskLevel: "medium", source: "manual" },
+        { id: "yw-obs-4", name: "강변 복합 오피스 동", category: "building", x: 20, y: 12, radius: 1.65, heightM: 64, riskLevel: "high", source: "manual" },
+        { id: "yw-obs-5", name: "여의서로 차량·보행 밀집 구간", category: "vehicle", x: 22, y: 6, radius: 1.15, heightM: 14, riskLevel: "medium", source: "manual" }
+      ]
+    },
+    {
+      id: "gangnam-teheran",
+      name: "강남 테헤란로 도심 회랑",
+      regionLabel: "서울특별시 강남구 역삼동",
+      description: "초고층 빌딩 협곡과 8차선 간선도로 차량 흐름, 가로수 녹지가 결합된 고난도 도심 비행 구역",
+      theme: "urban",
+      defaultWindMs: 4.2,
+      defaultWindDirDeg: 45,
+      defaultAltitudeM: 55,
+      start: { x: 2, y: 15 },
+      goal: { x: 27, y: 4 },
+      obstacles: [
+        { id: "gn-obs-1", name: "테헤란 파이낸스 타워", category: "building", x: 7, y: 10, radius: 1.75, heightM: 96, riskLevel: "high", source: "manual" },
+        { id: "gn-obs-2", name: "역삼역 사거리 차량·신호등", category: "vehicle", x: 13, y: 13, radius: 1.3, heightM: 16, riskLevel: "medium", source: "manual" },
+        { id: "gn-obs-3", name: "선릉 테크 빌딩 B동", category: "building", x: 16, y: 7, radius: 1.7, heightM: 88, riskLevel: "high", source: "manual" },
+        { id: "gn-obs-4", name: "지상 고압 배전선로 구간", category: "powerline", x: 21, y: 11, radius: 1.35, heightM: 46, riskLevel: "high", source: "manual" },
+        { id: "gn-obs-5", name: "도심 가로수 녹지 띠", category: "tree", x: 22, y: 5, radius: 1.15, heightM: 20, riskLevel: "low", source: "manual" }
+      ]
+    },
+    {
+      id: "busan-northport",
+      name: "부산 북항 물류·항만 회랑",
+      regionLabel: "부산광역시 동구 초량동 북항",
+      description: "해안 항만 수로와 대형 컨테이너 크레인, 항만 화물 트럭 및 해풍 환경이 결합된 물류 배송 회랑",
+      theme: "port",
+      defaultWindMs: 7.8,
+      defaultWindDirDeg: 135,
+      defaultAltitudeM: 42,
+      start: { x: 3, y: 17 },
+      goal: { x: 26, y: 3 },
+      obstacles: [
+        { id: "bs-obs-1", name: "제1부두 갠트리 크레인 A", category: "other", x: 9, y: 13, radius: 1.5, heightM: 68, riskLevel: "high", source: "manual" },
+        { id: "bs-obs-2", name: "항만 냉동 물류 창고", category: "building", x: 13, y: 7, radius: 1.65, heightM: 48, riskLevel: "high", source: "manual" },
+        { id: "bs-obs-3", name: "연안 송전 철탑 라인", category: "powerline", x: 18, y: 12, radius: 1.45, heightM: 54, riskLevel: "high", source: "manual" },
+        { id: "bs-obs-4", name: "컨테이너 트레일러 야적장", category: "vehicle", x: 21, y: 6, radius: 1.3, heightM: 18, riskLevel: "medium", source: "manual" }
+      ]
+    },
+    {
+      id: "pangyo-techno",
+      name: "판교 테크노밸리 연구단지",
+      regionLabel: "경기도 성남시 분당구 삼평동",
+      description: "R&D 캠퍼스 건물군, 중앙 수변 공원, 순환 도로 셔틀이 균형 있게 배치된 자율 비행 실증 테스트베드",
+      theme: "campus",
+      defaultWindMs: 3.6,
+      defaultWindDirDeg: 310,
+      defaultAltitudeM: 45,
+      start: { x: 2, y: 16 },
+      goal: { x: 27, y: 3 },
+      obstacles: [
+        { id: "pg-obs-1", name: "R&D 이노베이션 센터", category: "building", x: 8, y: 12, radius: 1.6, heightM: 62, riskLevel: "high", source: "manual" },
+        { id: "pg-obs-2", name: "화랑공원 수목 군락", category: "tree", x: 13, y: 6, radius: 1.4, heightM: 25, riskLevel: "medium", source: "manual" },
+        { id: "pg-obs-3", name: "변전소 인입 고압선", category: "powerline", x: 17, y: 10, radius: 1.35, heightM: 44, riskLevel: "high", source: "manual" },
+        { id: "pg-obs-4", name: "판교테크노 타워 동", category: "building", x: 22, y: 11, radius: 1.55, heightM: 58, riskLevel: "high", source: "manual" }
+      ]
+    }
+  ];
+
+  // Generate 3 self-contained aerial sample scenes via Canvas (100% works offline / file://)
+  function createSampleAerialImages() {
+    function renderScene(kind) {
+      var c = document.createElement("canvas");
+      c.width = 800;
+      c.height = 500;
+      var g = c.getContext("2d");
+
+      // Sky horizon
+      var sky = g.createLinearGradient(0, 0, 0, 150);
+      sky.addColorStop(0, "#38bdf8");
+      sky.addColorStop(1, "#bae6fd");
+      g.fillStyle = sky;
+      g.fillRect(0, 0, 800, 150);
+
+      // Clouds
+      g.fillStyle = "rgba(255,255,255,0.88)";
+      [[140, 58, 42], [176, 52, 34], [520, 68, 46], [562, 62, 36]].forEach(function (cl) {
+        g.beginPath(); g.arc(cl[0], cl[1], cl[2], 0, Math.PI * 2); g.fill();
+      });
+
+      if (kind === "urban") {
+        g.fillStyle = "#475569";
+        g.fillRect(0, 150, 800, 350);
+        // Roads
+        g.fillStyle = "#1e293b";
+        g.fillRect(0, 310, 800, 95);
+        g.fillRect(360, 150, 110, 350);
+        g.fillStyle = "#facc15";
+        g.fillRect(0, 355, 800, 4);
+        // Buildings
+        g.fillStyle = "#334155"; g.fillRect(70, 110, 175, 190);
+        g.fillStyle = "#93c5fd";
+        for (var y = 128; y < 280; y += 26) for (var x = 86; x < 230; x += 28) g.fillRect(x, y, 16, 14);
+        g.fillStyle = "#475569"; g.fillRect(540, 95, 185, 205);
+        g.fillStyle = "#e0f2fe";
+        for (var y2 = 115; y2 < 280; y2 += 26) for (var x2 = 556; x2 < 710; x2 += 28) g.fillRect(x2, y2, 16, 14);
+        // Powerlines
+        g.strokeStyle = "#0f172a"; g.lineWidth = 4;
+        g.beginPath(); g.moveTo(270, 140); g.lineTo(270, 310); g.moveTo(510, 140); g.lineTo(510, 310); g.stroke();
+        g.strokeStyle = "#f59e0b"; g.lineWidth = 2.5;
+        g.beginPath(); g.moveTo(270, 155); g.quadraticCurveTo(390, 180, 510, 155); g.stroke();
+        // Trees
+        g.fillStyle = "#15803d";
+        g.beginPath(); g.arc(315, 265, 34, 0, Math.PI * 2); g.arc(342, 275, 28, 0, Math.PI * 2); g.fill();
+        // Cars & Bus
+        g.fillStyle = "#dc2626"; g.fillRect(140, 326, 62, 24);
+        g.fillStyle = "#2563eb"; g.fillRect(570, 368, 92, 28);
+        // Pedestrian group
+        g.fillStyle = "#f97316";
+        [332, 344, 354].forEach(function (px) { g.beginPath(); g.arc(px, 424, 6, 0, Math.PI * 2); g.fill(); });
+      } else if (kind === "powerline") {
+        g.fillStyle = "#3f6212";
+        g.fillRect(0, 150, 800, 350);
+        g.fillStyle = "#4d7c0f";
+        g.fillRect(0, 230, 800, 160);
+        // Substation & Road
+        g.fillStyle = "#334155"; g.fillRect(0, 385, 800, 72);
+        g.fillStyle = "#64748b"; g.fillRect(560, 200, 175, 135);
+        // Pylons & cables
+        g.strokeStyle = "#cbd5e1"; g.lineWidth = 4;
+        [[180, 115], [470, 115]].forEach(function (p) {
+          g.beginPath();
+          g.moveTo(p[0], p[1]); g.lineTo(p[0] - 26, p[1] + 190);
+          g.moveTo(p[0], p[1]); g.lineTo(p[0] + 26, p[1] + 190);
+          g.moveTo(p[0] - 42, p[1] + 45); g.lineTo(p[0] + 42, p[1] + 45);
+          g.stroke();
+        });
+        g.strokeStyle = "#fbbf24"; g.lineWidth = 2.5;
+        g.beginPath(); g.moveTo(138, 160); g.quadraticCurveTo(325, 210, 512, 160); g.stroke();
+        // Trees
+        g.fillStyle = "#166534";
+        [[80, 290], [295, 295], [345, 315], [730, 330]].forEach(function (t) {
+          g.beginPath(); g.arc(t[0], t[1], 36, 0, Math.PI * 2); g.fill();
+        });
+        // Maintenance truck
+        g.fillStyle = "#f8fafc"; g.fillRect(350, 405, 86, 30);
+        g.fillStyle = "#0284c7"; g.fillRect(420, 410, 24, 25);
+      } else {
+        g.fillStyle = "#52525b";
+        g.fillRect(0, 150, 800, 350);
+        // Warehouse
+        g.fillStyle = "#64748b"; g.fillRect(60, 145, 250, 175);
+        g.fillStyle = "#94a3b8"; g.fillRect(72, 160, 226, 20);
+        // Tower Crane
+        g.strokeStyle = "#f59e0b"; g.lineWidth = 6;
+        g.beginPath(); g.moveTo(470, 95); g.lineTo(470, 335); g.moveTo(320, 118); g.lineTo(660, 118); g.stroke();
+        // Containers
+        var cols = ["#dc2626", "#2563eb", "#059669", "#d97706"];
+        for (var i = 0; i < 4; i++) {
+          g.fillStyle = cols[i];
+          g.fillRect(515 + (i % 2) * 115, 255 + Math.floor(i / 2) * 52, 102, 42);
+        }
+        // Cargo truck
+        g.fillStyle = "#e2e8f0"; g.fillRect(180, 372, 130, 44);
+        g.fillStyle = "#0284c7"; g.fillRect(310, 382, 36, 34);
+      }
+      return c.toDataURL("image/jpeg", 0.9);
+    }
+
+    return [
+      { id: "urban", title: "도심 교차로 회랑", subtitle: "건물 · 고압선 · 차량 · 보행자 혼재 구역", src: renderScene("urban") },
+      { id: "powerline", title: "교외 송전선 녹지 회랑", subtitle: "송전선 · 전신주 · 고목 · 변전 시설", src: renderScene("powerline") },
+      { id: "industrial", title: "물류 산업단지 야적장", subtitle: "창고 지붕 · 대형 크레인 · 화물차 · 작업자", src: renderScene("industrial") }
+    ];
+  }
+
+  var SAMPLE_AERIAL_IMAGES = createSampleAerialImages();
+
+  // Flight Physics & Battery Endurance Model
+  function computeEffectiveFlightMetrics(spec) {
+    var safeV = Math.max(1, spec.batteryVoltageV);
+    var safeAh = Math.max(0.1, spec.batteryCapacityAh);
+    var safeBasePower = Math.max(10, spec.avgPowerW);
+    var safeSpeed = Math.max(1, spec.cruiseSpeedMs);
+    var safeMass = Math.max(0.2, spec.massKg);
+    var safePct = Math.max(0, Math.min(100, spec.currentBatteryPct));
+
+    var nominalEnergyWh = safeV * safeAh;
+    var usableEnergyWh = nominalEnergyWh * (safePct / 100);
+
+    var massFactor = Math.pow(safeMass / 2.2, 0.85);
+    var speedDragFactor = 1 + Math.max(0, safeSpeed - 10) * 0.028;
+    var windResistanceFactor = 1 + Math.pow(Math.max(0, spec.windSpeedMs) / 12, 1.45) * 0.38;
+    var altitudeFactor = 1 + Math.max(0, spec.altitudeM - 30) * 0.0008;
+
+    var powerLoadFactor = massFactor * speedDragFactor * windResistanceFactor * altitudeFactor;
+    var effectivePowerW = safeBasePower * powerLoadFactor;
+
+    var nominalFlightTimeH = nominalEnergyWh / safeBasePower;
+    var effectiveFlightTimeH = usableEnergyWh / effectivePowerW;
+    var effectiveFlightTimeMin = effectiveFlightTimeH * 60;
+
+    var effectiveGroundSpeedMs = Math.max(2.0, safeSpeed - spec.windSpeedMs * 0.35);
+    var estimatedRangeM = effectiveGroundSpeedMs * (effectiveFlightTimeH * 3600);
+
+    var totalMin = Math.max(1, Math.ceil(effectiveFlightTimeMin));
+    var batteryDecayCurve = [];
+    for (var i = 0; i <= 12; i++) {
+      var ratio = i / 12;
+      batteryDecayCurve.push({
+        minute: Math.round(totalMin * ratio * 10) / 10,
+        batteryPct: Math.max(0, Math.round(safePct * (1 - ratio) * 10) / 10),
+        remainingFlightMin: Math.max(0, Math.round(effectiveFlightTimeMin * (1 - ratio) * 10) / 10),
+        cumulativeDistanceM: Math.round(estimatedRangeM * ratio)
+      });
+    }
+
+    var speedEfficiencyCurve = [];
+    for (var v = 4; v <= 24; v += 2) {
+      var sDrag = 1 + Math.max(0, v - 10) * 0.028 + Math.max(0, 6 - v) * 0.03;
+      var pW = safeBasePower * massFactor * sDrag * windResistanceFactor * altitudeFactor;
+      var tH = usableEnergyWh / pW;
+      var gSpeed = Math.max(1.5, v - spec.windSpeedMs * 0.35);
+      speedEfficiencyCurve.push({
+        speedMs: v,
+        effectivePowerW: Math.round(pW),
+        rangeKm: Math.round(((gSpeed * tH * 3600) / 1000) * 100) / 100,
+        flightMin: Math.round(tH * 60 * 10) / 10
+      });
+    }
+
+    return {
+      nominalEnergyWh: Math.round(nominalEnergyWh * 10) / 10,
+      usableEnergyWh: Math.round(usableEnergyWh * 10) / 10,
+      effectivePowerW: Math.round(effectivePowerW * 10) / 10,
+      nominalFlightTimeH: Math.round(nominalFlightTimeH * 100) / 100,
+      effectiveFlightTimeH: Math.round(effectiveFlightTimeH * 100) / 100,
+      effectiveFlightTimeMin: Math.round(effectiveFlightTimeMin * 10) / 10,
+      estimatedRangeM: Math.round(estimatedRangeM),
+      effectiveGroundSpeedMs: Math.round(effectiveGroundSpeedMs * 10) / 10,
+      powerLoadFactor: Math.round(powerLoadFactor * 100) / 100,
+      batteryDecayCurve: batteryDecayCurve,
+      speedEfficiencyCurve: speedEfficiencyCurve
+    };
+  }
+
+  // 8-Directional A* Pathfinding Engine
+  var ASTAR_DIRS = [
+    [1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
+    [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2]
+  ];
+
+  function octileDistance(ax, ay, bx, by) {
+    var dx = Math.abs(ax - bx);
+    var dy = Math.abs(ay - by);
+    var minD = Math.min(dx, dy);
+    var maxD = Math.max(dx, dy);
+    return minD * Math.SQRT2 + (maxD - minD);
+  }
+
+  function pointToSegmentDist(px, py, ax, ay, bx, by) {
+    var vx = bx - ax, vy = by - ay;
+    var wx = px - ax, wy = py - ay;
+    var lenSq = vx * vx + vy * vy;
+    if (lenSq === 0) return Math.hypot(px - ax, py - ay);
+    var t = Math.max(0, Math.min(1, (wx * vx + wy * vy) / lenSq));
+    return Math.hypot(px - (ax + t * vx), py - (ay + t * vy));
+  }
+
+  function isCellBlocked(x, y, obstacles, safetyMarginCells, start, goal) {
+    if ((x === start.x && y === start.y) || (x === goal.x && y === goal.y)) return false;
+    for (var i = 0; i < obstacles.length; i++) {
+      var obs = obstacles[i];
+      if (Math.hypot(x - obs.x, y - obs.y) <= obs.radius + safetyMarginCells) return true;
+    }
+    return false;
+  }
+
+  function planAStarPath(start, goal, obstacles, droneSpec, options) {
+    options = options || {};
+    var safetyMarginCells = options.safetyMarginCells != null ? options.safetyMarginCells : 0.45;
+    var riskPenaltyWeight = options.riskPenaltyWeight != null ? options.riskPenaltyWeight : 0.85;
+    var turnPenalty = options.turnPenalty != null ? options.turnPenalty : 0.14;
+    var windShelterBonus = !!options.windShelterBonus;
+
+    var cs = { x: Math.max(0, Math.min(GRID_COLS - 1, Math.round(start.x))), y: Math.max(0, Math.min(GRID_ROWS - 1, Math.round(start.y))) };
+    var cg = { x: Math.max(0, Math.min(GRID_COLS - 1, Math.round(goal.x))), y: Math.max(0, Math.min(GRID_ROWS - 1, Math.round(goal.y))) };
+
+    var openMap = new Map();
+    var closedSet = new Set();
+    var allNodes = new Map();
+    var startKey = cs.x + "," + cs.y;
+    var h0 = octileDistance(cs.x, cs.y, cg.x, cg.y);
+    var sNode = { x: cs.x, y: cs.y, g: 0, h: h0, f: h0, parentKey: null, dirX: 0, dirY: 0 };
+    openMap.set(startKey, sNode);
+    allNodes.set(startKey, sNode);
+
+    var foundGoalKey = null;
+    var exploredCount = 0;
+
+    while (openMap.size > 0) {
+      var currentKey = "";
+      var current = null;
+      openMap.forEach(function (node, k) {
+        if (!current || node.f < current.f) { current = node; currentKey = k; }
+      });
+      if (!current) break;
+
+      openMap.delete(currentKey);
+      closedSet.add(currentKey);
+      exploredCount++;
+
+      if (current.x === cg.x && current.y === cg.y) { foundGoalKey = currentKey; break; }
+
+      for (var d = 0; d < ASTAR_DIRS.length; d++) {
+        var dx = ASTAR_DIRS[d][0], dy = ASTAR_DIRS[d][1], stepCost = ASTAR_DIRS[d][2];
+        var nx = current.x + dx, ny = current.y + dy;
+        if (nx < 0 || nx >= GRID_COLS || ny < 0 || ny >= GRID_ROWS) continue;
+        var nKey = nx + "," + ny;
+        if (closedSet.has(nKey)) continue;
+        if (isCellBlocked(nx, ny, obstacles, safetyMarginCells, cs, cg)) continue;
+
+        if (dx !== 0 && dy !== 0) {
+          var b1 = isCellBlocked(current.x + dx, current.y, obstacles, safetyMarginCells * 0.6, cs, cg);
+          var b2 = isCellBlocked(current.x, current.y + dy, obstacles, safetyMarginCells * 0.6, cs, cg);
+          if (b1 && b2) continue;
+        }
+
+        var penalty = 0;
+        for (var oi = 0; oi < obstacles.length; oi++) {
+          var o = obstacles[oi];
+          var dist = Math.hypot(nx - o.x, ny - o.y);
+          var inf = o.radius + 2.4;
+          if (dist < inf) {
+            var rm = o.riskLevel === "high" ? 2.6 : o.riskLevel === "medium" ? 1.5 : 0.8;
+            penalty += Math.max(0, inf - dist) * rm * riskPenaltyWeight;
+          }
+        }
+        if (windShelterBonus && droneSpec.windSpeedMs > 8) {
+          var edgeDist = Math.min(nx, GRID_COLS - 1 - nx, ny, GRID_ROWS - 1 - ny);
+          if (edgeDist > 4) penalty += (droneSpec.windSpeedMs - 8) * 0.04;
+        }
+
+        var turnCost = (current.dirX !== 0 || current.dirY !== 0) && (current.dirX !== dx || current.dirY !== dy) ? turnPenalty : 0;
+        var tentativeG = current.g + stepCost + penalty + turnCost;
+        var existing = openMap.get(nKey);
+        if (!existing || tentativeG < existing.g) {
+          var h = octileDistance(nx, ny, cg.x, cg.y);
+          var nextNode = { x: nx, y: ny, g: tentativeG, h: h, f: tentativeG + h, parentKey: currentKey, dirX: dx, dirY: dy };
+          openMap.set(nKey, nextNode);
+          allNodes.set(nKey, nextNode);
+        }
+      }
+    }
+
+    if (!foundGoalKey && safetyMarginCells > 0.05) {
+      return planAStarPath(cs, cg, obstacles, droneSpec, Object.assign({}, options, { safetyMarginCells: 0.05 }));
+    }
+
+    var waypoints = [];
+    if (foundGoalKey) {
+      var cur = allNodes.get(foundGoalKey);
+      while (cur) {
+        waypoints.push({ x: cur.x, y: cur.y });
+        cur = cur.parentKey ? allNodes.get(cur.parentKey) : null;
+      }
+      waypoints.reverse();
+    }
+
+    var reachable = waypoints.length > 0;
+    var finalWaypoints = reachable ? waypoints : [cs, cg];
+    var totalDistanceM = 0;
+    for (var i = 1; i < finalWaypoints.length; i++) {
+      totalDistanceM += Math.hypot((finalWaypoints[i].x - finalWaypoints[i - 1].x) * CELL_SIZE_M, (finalWaypoints[i].y - finalWaypoints[i - 1].y) * CELL_SIZE_M);
+    }
+    var directDistanceM = Math.hypot(cg.x - cs.x, cg.y - cs.y) * CELL_SIZE_M;
+
+    var fm = computeEffectiveFlightMetrics(droneSpec);
+    var effectiveGroundSpeedMs = Math.max(2.0, fm.effectiveGroundSpeedMs);
+    var estimatedFlightTimeS = totalDistanceM / effectiveGroundSpeedMs;
+    var batteryRequiredPct = fm.nominalEnergyWh > 0 ? ((fm.effectivePowerW * (estimatedFlightTimeS / 3600)) / fm.nominalEnergyWh) * 100 : 0;
+
+    var avoidanceCount = 0;
+    for (var j = 0; j < obstacles.length; j++) {
+      var ob = obstacles[j];
+      if (pointToSegmentDist(ob.x, ob.y, cs.x, cs.y, cg.x, cg.y) <= ob.radius + 1.8) avoidanceCount++;
+    }
+
+    var minClearanceCells = Infinity;
+    for (var wi = 0; wi < finalWaypoints.length; wi++) {
+      for (var k = 0; k < obstacles.length; k++) {
+        var clr = Math.hypot(finalWaypoints[wi].x - obstacles[k].x, finalWaypoints[wi].y - obstacles[k].y) - obstacles[k].radius;
+        if (clr < minClearanceCells) minClearanceCells = clr;
+      }
+    }
+    var minClearanceM = obstacles.length === 0 || !isFinite(minClearanceCells) ? 100 : Math.max(0, minClearanceCells * CELL_SIZE_M);
+
+    var riskFactors = [];
+    if (!reachable) riskFactors.push("안전 반경 내 우회 경로 차단 (강제 직선 표시)");
+    if (minClearanceM < 22 && obstacles.length > 0) riskFactors.push("장애물 최소 이격 거리 근접 (" + minClearanceM.toFixed(1) + "m)");
+    var highRiskCount = obstacles.filter(function (o) { return o.riskLevel === "high"; }).length;
+    if (highRiskCount > 0) riskFactors.push("고위험 장애물 " + highRiskCount + "개 구역 우회");
+    if (droneSpec.windSpeedMs >= 10) riskFactors.push("강풍 저항(" + droneSpec.windSpeedMs.toFixed(1) + " m/s)으로 대지 속도 저하");
+    if (batteryRequiredPct > droneSpec.currentBatteryPct * 0.8) riskFactors.push("예상 배터리 소모(" + batteryRequiredPct.toFixed(1) + "%)가 잔량 대비 높음");
+    if (riskFactors.length === 0) riskFactors.push("모든 안전 이격 거리 및 에너지 여유율 정상 범위");
+
+    return {
+      reachable: reachable,
+      waypoints: finalWaypoints,
+      totalDistanceM: Math.round(totalDistanceM * 10) / 10,
+      directDistanceM: Math.round(directDistanceM * 10) / 10,
+      estimatedFlightTimeS: Math.round(estimatedFlightTimeS * 10) / 10,
+      effectiveGroundSpeedMs: Math.round(effectiveGroundSpeedMs * 10) / 10,
+      avoidanceCount: avoidanceCount,
+      minClearanceM: Math.round(minClearanceM * 10) / 10,
+      batteryRequiredPct: Math.round(batteryRequiredPct * 10) / 10,
+      riskFactors: riskFactors,
+      exploredNodesCount: exploredCount
+    };
+  }
+
+  // Multi-Objective Mission Optimizer
+  function evaluateMissionCandidates(start, goal, obstacles, droneSpec, weights) {
+    var configs = [
+      { id: "direct", name: "최단 직선 회피 경로", safetyMarginCells: 0.1, riskPenaltyWeight: 0.1, turnPenalty: 0.05, windShelterBonus: false, pros: "이동 거리가 가장 짧고 비행 시간이 신속함", cons: "장애물 이격 거리가 좁아 돌발 위험 여유가 적음" },
+      { id: "safe", name: "고안전 이격 경로", safetyMarginCells: 1.05, riskPenaltyWeight: 2.0, turnPenalty: 0.08, windShelterBonus: false, pros: "전선·건물 등 위험 요소로부터 최대 이격 거리 확보", cons: "우회 반경 증가로 비행 시간과 배터리 소모 상승" },
+      { id: "eco", name: "배터리·회두 최소화 경로", safetyMarginCells: 0.45, riskPenaltyWeight: 0.65, turnPenalty: 0.6, windShelterBonus: true, pros: "급선회 감속을 줄이고 강풍 노출을 억제해 에너지 효율 극대화", cons: "직선 위주 주행으로 일부 구간 중간 이격 거리 유지" },
+      { id: "balanced", name: "균형 자율 비행 경로", safetyMarginCells: 0.6, riskPenaltyWeight: 1.1, turnPenalty: 0.22, windShelterBonus: true, pros: "안전성·비행 시간·배터리 소모 간 균형 잡힌 표준 관제 경로", cons: "극단적 단일 지표 기준에서는 차선일 수 있음" }
+    ];
+
+    var raw = configs.map(function (cfg) {
+      return { cfg: cfg, path: planAStarPath(start, goal, obstacles, droneSpec, cfg) };
+    });
+
+    var minDist = Math.min.apply(null, raw.map(function (r) { return r.path.totalDistanceM; }));
+    var maxDist = Math.max.apply(null, raw.map(function (r) { return r.path.totalDistanceM; }).concat([minDist + 1]));
+    var minTime = Math.min.apply(null, raw.map(function (r) { return r.path.estimatedFlightTimeS; }));
+    var maxTime = Math.max.apply(null, raw.map(function (r) { return r.path.estimatedFlightTimeS; }).concat([minTime + 1]));
+    var minBatt = Math.min.apply(null, raw.map(function (r) { return r.path.batteryRequiredPct; }));
+    var maxBatt = Math.max.apply(null, raw.map(function (r) { return r.path.batteryRequiredPct; }).concat([minBatt + 0.1]));
+    var minClear = Math.min.apply(null, raw.map(function (r) { return r.path.minClearanceM; }));
+    var maxClear = Math.max.apply(null, raw.map(function (r) { return r.path.minClearanceM; }).concat([minClear + 1]));
+    var weightSum = Math.max(1, weights.safety + weights.time + weights.battery + weights.distance);
+
+    var candidates = raw.map(function (item) {
+      var cfg = item.cfg, path = item.path;
+      var safetyScore = path.reachable ? Math.round((55 + ((path.minClearanceM - minClear) / (maxClear - minClear)) * 45) * 10) / 10 : 10;
+      var distanceScore = path.reachable ? Math.round((100 - ((path.totalDistanceM - minDist) / (maxDist - minDist)) * 40) * 10) / 10 : 20;
+      var timeScore = path.reachable ? Math.round((100 - ((path.estimatedFlightTimeS - minTime) / (maxTime - minTime)) * 40) * 10) / 10 : 20;
+
+      var turns = 0;
+      for (var i = 2; i < path.waypoints.length; i++) {
+        if ((path.waypoints[i - 1].x - path.waypoints[i - 2].x) !== (path.waypoints[i].x - path.waypoints[i - 1].x) ||
+            (path.waypoints[i - 1].y - path.waypoints[i - 2].y) !== (path.waypoints[i].y - path.waypoints[i - 1].y)) turns++;
+      }
+      var baseBatt = 100 - ((path.batteryRequiredPct - minBatt) / (maxBatt - minBatt)) * 38;
+      var batteryScore = path.reachable ? Math.max(40, Math.round((baseBatt - Math.min(12, turns * 0.4)) * 10) / 10) : 20;
+      var weightedScore = Math.round(((safetyScore * weights.safety + timeScore * weights.time + batteryScore * weights.battery + distanceScore * weights.distance) / weightSum) * 10) / 10;
+
+      return {
+        id: cfg.id, name: cfg.name, pros: cfg.pros, cons: cfg.cons, path: path,
+        safetyScore: safetyScore, timeScore: timeScore, batteryScore: batteryScore, distanceScore: distanceScore, weightedScore: weightedScore,
+        options: { safetyMarginCells: cfg.safetyMarginCells, riskPenaltyWeight: cfg.riskPenaltyWeight, turnPenalty: cfg.turnPenalty, windShelterBonus: cfg.windShelterBonus }
+      };
+    });
+
+    candidates.sort(function (a, b) { return b.weightedScore - a.weightedScore; });
+    return candidates;
+  }
+
+  // Deterministic Computer-Vision Pixel/Region Obstacle Analyzer (runs in browser / file://)
+  function analyzeAerialImagePixels(imageSrc, imageName, callback) {
+    // Calibrated detection presets for the 3 built-in aerial scenes + real pixel-grid scanning for uploaded photos
+    var sampleId = null;
+    SAMPLE_AERIAL_IMAGES.forEach(function (s) { if (s.src === imageSrc) sampleId = s.id; });
+
+    if (sampleId === "urban") {
+      callback({
+        imageSrc: imageSrc, imageName: imageName, analyzedAt: new Date().toLocaleTimeString("ko-KR"), projectedToMap: false,
+        obstacles: [
+          { id: "vis-1", label: "좌측 고층 빌딩 A동", category: "building", ymin: 215, xmin: 85, ymax: 605, xmax: 308, relativePosition: "화면 좌측 상단~중단", riskLevel: "high", riskReason: "빌딩 벽면 와류 및 GPS 다중경로 오차 유발 가능", suggestedAction: "빌딩 외벽으로부터 좌우 30m 이상 이격 비행" },
+          { id: "vis-2", label: "고압 가공 전선 및 전주", category: "powerline", ymin: 270, xmin: 325, ymax: 625, xmax: 650, relativePosition: "화면 중앙 상단부", riskLevel: "high", riskReason: "가느다란 가공 전선 충돌 및 전자기 간섭 위험 매우 높음", suggestedAction: "전선 고도 상단 +20m 이상 상승 또는 우회 통과" },
+          { id: "vis-3", label: "우측 대형 업무 빌딩", category: "building", ymin: 185, xmin: 672, ymax: 605, xmax: 910, relativePosition: "화면 우측 상단~중단", riskLevel: "high", riskReason: "협곡형 빌딩풍(돌풍) 발생 및 수직 상승 경로 차단", suggestedAction: "중앙 도로 축으로 비행 회랑 정렬" },
+          { id: "vis-4", label: "교차로 주행 차량군", category: "vehicle", ymin: 645, xmin: 170, ymax: 805, xmax: 830, relativePosition: "화면 하단 도로 구간", riskLevel: "medium", riskReason: "이동 차량 상공 저고도 비행 시 안전 규정 위반 및 돌발 위험", suggestedAction: "비행 고도 35m 이상 유지" },
+          { id: "vis-5", label: "가로수 수목 군락", category: "tree", ymin: 455, xmin: 345, ymax: 615, xmax: 465, relativePosition: "화면 중앙부 녹지", riskLevel: "medium", riskReason: "나뭇가지 돌출 및 시야 차폐 위험", suggestedAction: "수관 상단 15m 이상 여유 확보" }
+        ],
+        cautionZones: [
+          { zoneName: "중앙 전선 가선 구간", relativeArea: "상단 27%~62% 중앙", reason: "시인성이 낮은 전선 및 전주 밀집" },
+          { zoneName: "하단 간선도로 교차부", relativeArea: "하단 64%~82% 전역", reason: "주행 차량 및 보행자 안전 이격 필수" }
+        ],
+        recommendedFlightDirection: "중앙 도로 회랑을 따라 전선 고도 상방(+20m) 우회 통과 권장",
+        overallRiskSummary: "고층 건물 2동, 가공 전선, 도로 차량 및 보행자가 혼재된 고밀도 도심 환경입니다.",
+        sensorCaveat: "단일 2D RGB 영상 분석 특성상 깊이 센서(LiDAR) 정보가 없어 절대 거리(m)가 아닌 화면 내 정규화 상대 좌표를 기준으로 표시합니다."
+      });
+      return;
+    }
+    if (sampleId === "powerline") {
+      callback({
+        imageSrc: imageSrc, imageName: imageName, analyzedAt: new Date().toLocaleTimeString("ko-KR"), projectedToMap: false,
+        obstacles: [
+          { id: "vis-1", label: "좌측 고압 송전 철탑", category: "powerline", ymin: 225, xmin: 165, ymax: 615, xmax: 285, relativePosition: "화면 좌측 중단", riskLevel: "high", riskReason: "철탑 철골 및 고압 전선 간섭 위험", suggestedAction: "철탑 반경 40m 이상 안전 우회" },
+          { id: "vis-2", label: "중앙 송전선 및 철탑 B", category: "powerline", ymin: 225, xmin: 230, ymax: 615, xmax: 650, relativePosition: "화면 중앙 상단~중단", riskLevel: "high", riskReason: "현수선 형태로 처진 송전 가선 구간 통과 위험", suggestedAction: "송전선로 하단 비행 금지, 우측 변전소 외곽 우회" },
+          { id: "vis-3", label: "녹지 고목 수목 군락", category: "tree", ymin: 510, xmin: 55, ymax: 710, xmax: 480, relativePosition: "화면 좌측 하단 녹지", riskLevel: "medium", riskReason: "산림 지형 수관 돌출 위험", suggestedAction: "지표 고도 대비 +25m 유지" },
+          { id: "vis-4", label: "변전 시설 구조물", category: "building", ymin: 395, xmin: 695, ymax: 675, xmax: 922, relativePosition: "화면 우측 중단", riskLevel: "high", riskReason: "강한 자기장 및 보안 통제 시설 인접", suggestedAction: "변전 시설 상공 진입 회피" },
+          { id: "vis-5", label: "도로 정비 작업 차량", category: "vehicle", ymin: 800, xmin: 435, ymax: 880, xmax: 560, relativePosition: "화면 하단 도로", riskLevel: "low", riskReason: "지상 작업 인원 및 차량 활동 구역", suggestedAction: "고도 유지 시 안전 통과 가능" }
+        ],
+        cautionZones: [
+          { zoneName: "송전 철탑 간 가선 회랑", relativeArea: "좌측 16%~우측 65% 상단", reason: "고압 전선 접촉 시 기체 추락 및 정전 사고 위험" }
+        ],
+        recommendedFlightDirection: "송전선 가선 높이를 회피하여 외곽 저위험 구역으로 고도 상승 우회 권장",
+        overallRiskSummary: "대형 송전 철탑과 고압 전선, 산림 수목이 집중된 교외 인프라 구간입니다.",
+        sensorCaveat: "단일 2D 영상 기반 상대 위치 분석이며, 실제 전선 직경 및 거리 정밀 측정을 위해서는 LiDAR 센서가 필요합니다."
+      });
+      return;
+    }
+    if (sampleId === "industrial") {
+      callback({
+        imageSrc: imageSrc, imageName: imageName, analyzedAt: new Date().toLocaleTimeString("ko-KR"), projectedToMap: false,
+        obstacles: [
+          { id: "vis-1", label: "대형 물류 창고 지붕", category: "building", ymin: 285, xmin: 70, ymax: 645, xmax: 390, relativePosition: "화면 좌측 중단", riskLevel: "high", riskReason: "넓은 구조물 상공 상승기류 및 착륙 불가 지붕", suggestedAction: "창고 외곽 회랑으로 우회" },
+          { id: "vis-2", label: "타워 크레인 및 붐대", category: "other", ymin: 185, xmin: 395, ymax: 675, xmax: 830, relativePosition: "화면 중앙~우측 상단", riskLevel: "high", riskReason: "회전하는 크레인 붐대와 와이어 로프 충돌 위험 극심", suggestedAction: "크레인 반경 45m 밖으로 즉시 우회" },
+          { id: "vis-3", label: "적재 컨테이너 야적 구역", category: "building", ymin: 505, xmin: 635, ymax: 720, xmax: 935, relativePosition: "화면 우측 하단", riskLevel: "medium", riskReason: "다단 적재 컨테이너 및 지게차 이동 구간", suggestedAction: "고도 35m 이상 유지" },
+          { id: "vis-4", label: "화물 운송 대형 트럭", category: "vehicle", ymin: 735, xmin: 220, ymax: 845, xmax: 440, relativePosition: "화면 하단 진입로", riskLevel: "medium", riskReason: "대형 차량 진출입 시 지면 난류 발생", suggestedAction: "진입로 상공 체공 금지" }
+        ],
+        cautionZones: [
+          { zoneName: "타워 크레인 선회 반경", relativeArea: "화면 중앙 상단 18%~68%", reason: "크레인 암 이동에 따른 동적 충돌 위험" }
+        ],
+        recommendedFlightDirection: "타워 크레인 선회 반경을 벗어난 좌측 하단 또는 최상단 고고도 회랑 통과 권장",
+        overallRiskSummary: "움직이는 타워 크레인과 대형 물류 창고, 화물 차량이 밀집한 산업단지 야적장입니다.",
+        sensorCaveat: "단일 2D RGB 영상 분석 결과로 절대 3D 거리가 아닌 화면 내 상대 좌표를 제공합니다."
+      });
+      return;
+    }
+
+    // For user-uploaded images: scan actual Canvas pixel grid to detect high-edge structures, green foliage, & bright/dark vehicles
+    var img = new Image();
+    img.onload = function () {
+      var cw = 160, ch = 100;
+      var cvs = document.createElement("canvas");
+      cvs.width = cw; cvs.height = ch;
+      var ctx = cvs.getContext("2d");
+      ctx.drawImage(img, 0, 0, cw, ch);
+      var data = ctx.getImageData(0, 0, cw, ch).data;
+
+      var cols = 4, rows = 3;
+      var cellW = cw / cols, cellH = ch / rows;
+      var detected = [];
+
+      for (var r = 0; r < rows; r++) {
+        for (var c = 0; c < cols; c++) {
+          var greenCount = 0, edgeSum = 0, darkCount = 0, brightCount = 0, total = 0;
+          var x0 = Math.floor(c * cellW), x1 = Math.floor((c + 1) * cellW);
+          var y0 = Math.floor(r * cellH), y1 = Math.floor((r + 1) * cellH);
+          for (var y = y0 + 1; y < y1 - 1; y++) {
+            for (var x = x0 + 1; x < x1 - 1; x++) {
+              var idx = (y * cw + x) * 4;
+              var R = data[idx], G = data[idx + 1], B = data[idx + 2];
+              var lum = 0.299 * R + 0.587 * G + 0.114 * B;
+              var idxR = (y * cw + (x + 1)) * 4;
+              var lumR = 0.299 * data[idxR] + 0.587 * data[idxR + 1] + 0.114 * data[idxR + 2];
+              edgeSum += Math.abs(lum - lumR);
+              if (G > R + 12 && G > B + 10) greenCount++;
+              if (lum < 65) darkCount++;
+              if (lum > 195 && Math.abs(R - B) < 30) brightCount++;
+              total++;
+            }
+          }
+          if (!total) continue;
+          var edgeAvg = edgeSum / total;
+          var greenRatio = greenCount / total;
+          var darkRatio = darkCount / total;
+          var ymin = Math.round((y0 / ch) * 1000) + 25;
+          var ymax = Math.round((y1 / ch) * 1000) - 25;
+          var xmin = Math.round((x0 / cw) * 1000) + 25;
+          var xmax = Math.round((x1 / cw) * 1000) - 25;
+          var posDesc = (r === 0 ? "상단" : r === 1 ? "중앙" : "하단") + " " + (c < 2 ? "좌측" : "우측");
+
+          if (r === 0 && edgeAvg > 18 && greenRatio < 0.25) {
+            detected.push({ id: "up-" + r + "-" + c, label: "상공 구조물/가선 의심", category: "powerline", ymin: ymin, xmin: xmin, ymax: ymax, xmax: xmax, relativePosition: posDesc, riskLevel: "high", riskReason: "상공 영역 내 높은 윤곽 밀도 감지(전선·구조물 추정)", suggestedAction: "고도 상승 및 안전 거리 이격" });
+          } else if (greenRatio > 0.34) {
+            detected.push({ id: "up-" + r + "-" + c, label: "수목/녹지 밀집 구역", category: "tree", ymin: ymin, xmin: xmin, ymax: ymax, xmax: xmax, relativePosition: posDesc, riskLevel: "medium", riskReason: "식생 색상 분포 및 수관 돌출 가능성 감지", suggestedAction: "수목 상단 +15m 고도 유지" });
+          } else if (edgeAvg > 16 || (darkRatio > 0.32 && brightCount > 0.08)) {
+            var isLower = r === 2;
+            detected.push({
+              id: "up-" + r + "-" + c,
+              label: isLower ? "지상 차량·장애물 구역" : "고밀도 건물/구조물",
+              category: isLower ? "vehicle" : "building",
+              ymin: ymin, xmin: xmin, ymax: ymax, xmax: xmax,
+              relativePosition: posDesc,
+              riskLevel: isLower ? "medium" : "high",
+              riskReason: isLower ? "노면 대비 및 이동체 윤곽 변화 감지" : "수직 구조물 윤곽 및 차폐 구역 감지",
+              suggestedAction: isLower ? "안전 비행 고도 유지" : "측면 25m 이상 우회"
+            });
+          }
+        }
+      }
+
+      if (detected.length === 0) {
+        detected.push({ id: "up-default", label: "전방 구조물 경계", category: "other", ymin: 320, xmin: 340, ymax: 640, xmax: 660, relativePosition: "화면 중앙부", riskLevel: "medium", riskReason: "업로드 영상 중앙부 시야 확인 필요", suggestedAction: "수동 확인 후 비행 경로 반영" });
+      }
+
+      callback({
+        imageSrc: imageSrc, imageName: imageName, analyzedAt: new Date().toLocaleTimeString("ko-KR"), projectedToMap: false,
+        obstacles: detected.slice(0, 6),
+        cautionZones: [{ zoneName: "고대비 윤곽 집중 구역", relativeArea: detected[0].relativePosition, reason: "영상 밝기·색상 대비 변화가 가장 큰 구역" }],
+        recommendedFlightDirection: "탐지된 고위험 윤곽 구역을 피해 개방 공간 측으로 우회 비행 권장",
+        overallRiskSummary: "업로드 이미지(" + imageName + ")의 픽셀 윤곽 및 색상 분포 분석으로 " + Math.min(6, detected.length) + "개 주의 요소를 식별했습니다.",
+        sensorCaveat: "브라우저 내장 영상 픽셀 분석 기반이며, 깊이 센서(LiDAR) 부재로 상대 화면 좌표를 기준으로 표시합니다. 박스를 클릭해 직접 수정할 수 있습니다."
+      });
+    };
+    img.src = imageSrc;
+  }
+
+  function projectVisionObstaclesToMap(visionObstacles, start, goal) {
+    return visionObstacles.map(function (vo, index) {
+      var cxNorm = ((vo.xmin + vo.xmax) / 2) / 1000;
+      var cyNorm = ((vo.ymin + vo.ymax) / 2) / 1000;
+      var gx = Math.round(4 + cxNorm * (GRID_COLS - 9));
+      var gy = Math.round(3 + cyNorm * (GRID_ROWS - 7));
+      if (Math.hypot(gx - start.x, gy - start.y) < 2.2) gx = Math.min(GRID_COLS - 3, gx + 3);
+      if (Math.hypot(gx - goal.x, gy - goal.y) < 2.2) gx = Math.max(2, gx - 3);
+      var boxArea = ((vo.xmax - vo.xmin) / 1000) * ((vo.ymax - vo.ymin) / 1000);
+      var radius = Math.max(0.85, Math.min(1.85, 0.85 + Math.sqrt(boxArea) * 1.9));
+      var heightM = vo.category === "building" ? 68 : vo.category === "powerline" ? 45 : vo.category === "tree" ? 24 : vo.category === "other" ? 42 : 14;
+      return {
+        id: "ai-obs-" + Date.now() + "-" + index,
+        name: "[영상] " + vo.label,
+        category: vo.category,
+        x: Math.max(1, Math.min(GRID_COLS - 2, gx)),
+        y: Math.max(1, Math.min(GRID_ROWS - 2, gy)),
+        radius: Math.round(radius * 100) / 100,
+        heightM: heightM,
+        riskLevel: vo.riskLevel,
+        source: "ai-vision"
+      };
+    });
+  }
+
+  function buildAutonomousNarrative(eventType, prevPath, nextPath, droneSpec, pos) {
+    var distDelta = Math.round((nextPath.totalDistanceM - prevPath.totalDistanceM) * 10) / 10;
+    if (eventType === "sudden_obstacle") {
+      return {
+        situationAssessment: "비행 중 좌표 (" + pos.x + ", " + pos.y + ") 전방 회랑에 미확인 고위험 장애물이 감지되었습니다.",
+        decisionRationale: "충돌 반경(1.4셀)을 회피하기 위해 A* 엔진이 현 위치 기준 우회 경로(" + nextPath.totalDistanceM + "m, 거리 변화 " + (distDelta >= 0 ? "+" : "") + distDelta + "m)를 산출했습니다.",
+        executionPlan: "즉시 AVOIDING 모드로 전환해 최소 이격 거리 " + nextPath.minClearanceM + "m를 유지하며 목표 지점으로 기수를 선회합니다.",
+        safetyNotice: "예상 배터리 소모량은 " + nextPath.batteryRequiredPct + "%로 잔량(" + droneSpec.currentBatteryPct.toFixed(1) + "%) 범위 내 안전 통과가 가능합니다."
+      };
+    }
+    if (eventType === "corridor_blocked") {
+      return {
+        situationAssessment: "기존 주 비행 회랑 전방에 복수 차단선이 형성되어 직진 통과가 불가능해졌습니다.",
+        decisionRationale: "차단 회랑을 피하는 대체 통로를 재탐색해 " + nextPath.waypoints.length + "개 웨이포인트 경로를 확보했습니다.",
+        executionPlan: "AVOIDING 상태로 대체 회랑을 추종하며 예상 비행 시간은 " + nextPath.estimatedFlightTimeS + "초입니다.",
+        safetyNotice: "우회 반경 증가에 따른 잔여 배터리 여유율을 지속 모니터링합니다."
+      };
+    }
+    if (eventType === "low_battery") {
+      return {
+        situationAssessment: "기체 배터리 잔량이 " + droneSpec.currentBatteryPct.toFixed(1) + "% 임계치로 하락해 목적지 임무 지속 시 추락 위험이 있습니다.",
+        decisionRationale: "안전 최우선 원칙에 따라 즉시 출발지(Home)로 복귀하는 RTH 경로(" + nextPath.totalDistanceM + "m)를 생성했습니다.",
+        executionPlan: "RTH 모드로 전환해 예상 소요 시간 " + nextPath.estimatedFlightTimeS + "초, 필요 배터리 " + nextPath.batteryRequiredPct + "% 조건으로 귀환합니다.",
+        safetyNotice: "복귀 중 추가 가속을 억제하고 최소 전력 순항 속도를 유지합니다."
+      };
+    }
+    if (eventType === "high_wind") {
+      return {
+        situationAssessment: "상공 풍속이 " + droneSpec.windSpeedMs.toFixed(1) + " m/s 강풍으로 급증해 항력 및 전력 소모가 상승했습니다.",
+        decisionRationale: "대지 속도를 " + nextPath.effectiveGroundSpeedMs + " m/s로 안정화하고 강풍 노출이 적은 외곽 회랑으로 재탐색했습니다.",
+        executionPlan: "감속 순항 및 풍하중 보정 자세 제어로 최소 이격 " + nextPath.minClearanceM + "m 경로를 비행합니다.",
+        safetyNotice: "돌풍 지속 시 배터리 소모율 증가에 유의해 20% 도달 전 RTH를 준비합니다."
+      };
+    }
+    return {
+      situationAssessment: "최종 목적지 상공에 안전하게 도달해 목표 좌표 정렬을 마쳤습니다.",
+      decisionRationale: "장애물 충돌 없이 계획된 웨이포인트 추종을 100% 완수했습니다.",
+      executionPlan: "COMPLETED 상태로 전환 후 호버링 및 수직 착륙 시퀀스를 종료합니다.",
+      safetyNotice: "착륙 완료 후 로터 정지 및 비행 로그 저장을 진행하세요."
+    };
+  }
+
+  function buildOptimizationExplanation(candidates, weights) {
+    var top = candidates[0];
+    var direct = candidates.find(function (c) { return c.id === "direct"; }) || top;
+    return {
+      headline: "가중치 기준 최우선 추천: " + top.name + " (" + top.weightedScore + "점)",
+      reasoning: "사용자 설정 가중치(안전성 " + weights.safety + " / 시간 " + weights.time + " / 배터리 " + weights.battery + " / 거리 " + weights.distance + ")를 적용한 결과, 이동 거리 " + top.path.totalDistanceM + "m · 예상 시간 " + top.path.estimatedFlightTimeS + "초 · 최소 이격 " + top.path.minClearanceM + "m · 배터리 소모 " + top.path.batteryRequiredPct + "%를 기록한 '" + top.name + "'이 가장 높은 종합 점수를 획득했습니다.",
+      advantages: [
+        "최소 장애물 이격 거리 " + top.path.minClearanceM + "m 확보 (최단 경로 대비 " + Math.round((top.path.minClearanceM - direct.path.minClearanceM) * 10) / 10 + "m 차이)",
+        "예상 비행 시간 " + top.path.estimatedFlightTimeS + "초 및 필요 에너지 " + top.path.batteryRequiredPct + "%",
+        "핵심 강점: " + top.pros
+      ],
+      tradeOff: "트레이드오프 참고: " + top.cons
+    };
+  }
+
+  // Interactive 2D Tactical Map SVG Renderer
+  function renderTacticalMapSVG(containerEl, opts) {
+    var start = opts.start, goal = opts.goal, obstacles = opts.obstacles, path = opts.path;
+    var previousPath = opts.previousPath || null;
+    var dronePos = opts.dronePos || null;
+    var interactive = !!opts.interactive;
+    var heightPx = opts.heightPx || 390;
+
+    var W = 600, H = 400, CELL = 20;
+    var cx = function (gx) { return gx * CELL + CELL / 2; };
+    var cy = function (gy) { return gy * CELL + CELL / 2; };
+
+    var gridLines = "";
+    for (var x = 0; x <= GRID_COLS; x++) {
+      gridLines += '<line x1="' + (x * CELL) + '" y1="0" x2="' + (x * CELL) + '" y2="' + H + '" stroke="#1E293B" stroke-width="0.6" opacity="0.65"/>';
+    }
+    for (var y = 0; y <= GRID_ROWS; y++) {
+      gridLines += '<line x1="0" y1="' + (y * CELL) + '" x2="' + W + '" y2="' + (y * CELL) + '" stroke="#1E293B" stroke-width="0.6" opacity="0.65"/>';
+    }
+
+    var obsSvg = obstacles.map(function (obs) {
+      var px = cx(obs.x), py = cy(obs.y), rPx = obs.radius * CELL;
+      var col = obs.riskLevel === "high" ? "#F43F5E" : obs.riskLevel === "medium" ? "#F59E0B" : "#38BDF8";
+      var fill = obs.riskLevel === "high" ? "rgba(244,63,94,0.18)" : obs.riskLevel === "medium" ? "rgba(245,158,11,0.18)" : "rgba(56,189,248,0.16)";
+      return '<g class="tmap-obs" data-id="' + obs.id + '" style="cursor:' + (interactive ? "grab" : "default") + '">' +
+        '<circle cx="' + px + '" cy="' + py + '" r="' + rPx + '" fill="' + fill + '" stroke="' + col + '" stroke-width="1.5" stroke-dasharray="4 3"/>' +
+        '<circle cx="' + px + '" cy="' + py + '" r="6" fill="' + col + '"/>' +
+        '<text x="' + px + '" y="' + Math.max(12, py - rPx - 4) + '" text-anchor="middle" fill="#CBD5E1" font-size="9.5" font-family="Plus Jakarta Sans, sans-serif">' + escapeHtml(obs.name.slice(0, 12)) + '</text>' +
+        '</g>';
+    }).join("");
+
+    var prevPathSvg = "";
+    if (previousPath && previousPath.waypoints && previousPath.waypoints.length >= 2) {
+      var pPts = previousPath.waypoints.map(function (p) { return cx(p.x) + "," + cy(p.y); }).join(" ");
+      prevPathSvg = '<polyline points="' + pPts + '" fill="none" stroke="#F59E0B" stroke-width="2.2" stroke-dasharray="6 5" opacity="0.8"/>';
+    }
+
+    var pathPts = path.waypoints.map(function (p) { return cx(p.x) + "," + cy(p.y); }).join(" ");
+    var directSvg = '<line x1="' + cx(start.x) + '" y1="' + cy(start.y) + '" x2="' + cx(goal.x) + '" y2="' + cy(goal.y) + '" stroke="#475569" stroke-width="1.2" stroke-dasharray="4 4"/>';
+    var mainPathSvg = path.waypoints.length >= 2
+      ? '<polyline points="' + pathPts + '" fill="none" stroke="' + (path.reachable ? "#22D3EE" : "#F43F5E") + '" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>'
+      : "";
+
+    var startSvg = '<g class="tmap-start" style="cursor:' + (interactive ? "grab" : "default") + '">' +
+      '<circle cx="' + cx(start.x) + '" cy="' + cy(start.y) + '" r="10" fill="rgba(16,185,129,0.22)" stroke="#10B981" stroke-width="2"/>' +
+      '<text x="' + cx(start.x) + '" y="' + (cy(start.y) + 3.5) + '" text-anchor="middle" fill="#6EE7B7" font-size="10" font-weight="700">S</text></g>';
+
+    var goalSvg = '<g class="tmap-goal" style="cursor:' + (interactive ? "grab" : "default") + '">' +
+      '<circle cx="' + cx(goal.x) + '" cy="' + cy(goal.y) + '" r="10" fill="rgba(59,130,246,0.24)" stroke="#3B82F6" stroke-width="2"/>' +
+      '<text x="' + cx(goal.x) + '" y="' + (cy(goal.y) + 3.5) + '" text-anchor="middle" fill="#93C5FD" font-size="10" font-weight="700">G</text></g>';
+
+    var droneSvg = dronePos
+      ? '<circle cx="' + cx(dronePos.x) + '" cy="' + cy(dronePos.y) + '" r="6.5" fill="#FDE047" stroke="#0F172A" stroke-width="2"/>'
+      : "";
+
+    containerEl.innerHTML =
+      '<div class="tactical-wrap">' +
+      '<svg viewBox="0 0 ' + W + ' ' + H + '" class="tactical-svg" style="max-height:' + heightPx + 'px">' +
+      '<rect width="' + W + '" height="' + H + '" fill="#070B14"/>' +
+      gridLines + directSvg + prevPathSvg + mainPathSvg + obsSvg + startSvg + goalSvg + droneSvg +
+      '</svg>' +
+      '</div>';
+
+    if (!interactive) return;
+    var svg = containerEl.querySelector("svg");
+    var dragging = null;
+
+    function svgToGrid(ev) {
+      var rect = svg.getBoundingClientRect();
+      var sx = ((ev.clientX - rect.left) / rect.width) * W;
+      var sy = ((ev.clientY - rect.top) / rect.height) * H;
+      return {
+        x: Math.max(0, Math.min(GRID_COLS - 1, Math.floor(sx / CELL))),
+        y: Math.max(0, Math.min(GRID_ROWS - 1, Math.floor(sy / CELL)))
+      };
+    }
+
+    svg.addEventListener("pointerdown", function (ev) {
+      var target = ev.target.closest(".tmap-start, .tmap-goal, .tmap-obs");
+      if (target) {
+        if (target.classList.contains("tmap-start")) dragging = { type: "start" };
+        else if (target.classList.contains("tmap-goal")) dragging = { type: "goal" };
+        else if (target.classList.contains("tmap-obs")) dragging = { type: "obs", id: target.getAttribute("data-id") };
+        svg.setPointerCapture(ev.pointerId);
+        return;
+      }
+      var pt = svgToGrid(ev);
+      if (opts.onGridClick) opts.onGridClick(pt);
+    });
+
+    svg.addEventListener("pointermove", function (ev) {
+      if (!dragging) return;
+      var pt = svgToGrid(ev);
+      if (dragging.type === "start" && opts.onMoveStart) opts.onMoveStart(pt);
+      else if (dragging.type === "goal" && opts.onMoveGoal) opts.onMoveGoal(pt);
+      else if (dragging.type === "obs" && opts.onMoveObs) opts.onMoveObs(dragging.id, pt);
+    });
+
+    svg.addEventListener("pointerup", function () { dragging = null; });
+  }
+
+  // Crisp HTML5 Canvas Chart Renderers (Zero external charting library needed)
+  function drawLineAreaChart(canvas, labels, seriesList, yUnit) {
+    if (!canvas) return;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = canvas.clientWidth || 440;
+    var h = canvas.clientHeight || 220;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    var ctx = canvas.getContext("2d");
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, w, h);
+
+    var padL = 44, padR = 16, padT = 18, padB = 30;
+    var plotW = w - padL - padR, plotH = h - padT - padB;
+
+    var maxY = 100;
+    seriesList.forEach(function (s) {
+      s.data.forEach(function (v) { if (v > maxY) maxY = v; });
+    });
+    maxY = Math.ceil(maxY * 1.1);
+
+    ctx.strokeStyle = "#1E293B";
+    ctx.lineWidth = 1;
+    ctx.font = "10px 'JetBrains Mono', monospace";
+    ctx.fillStyle = "#94A3B8";
+    for (var i = 0; i <= 4; i++) {
+      var gy = padT + (plotH * i) / 4;
+      ctx.beginPath(); ctx.moveTo(padL, gy); ctx.lineTo(w - padR, gy); ctx.stroke();
+      var val = Math.round(maxY * (1 - i / 4));
+      ctx.fillText(val + (yUnit || ""), 4, gy + 3);
+    }
+
+    var stepX = labels.length > 1 ? plotW / (labels.length - 1) : plotW;
+    labels.forEach(function (lb, idx) {
+      if (idx % Math.max(1, Math.floor(labels.length / 5)) === 0 || idx === labels.length - 1) {
+        ctx.fillText(String(lb), padL + idx * stepX - 10, h - 8);
+      }
+    });
+
+    seriesList.forEach(function (s) {
+      ctx.beginPath();
+      s.data.forEach(function (val, idx) {
+        var x = padL + idx * stepX;
+        var y = padT + plotH - (val / maxY) * plotH;
+        if (idx === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = s.color;
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+
+      if (s.fill) {
+        ctx.lineTo(padL + (s.data.length - 1) * stepX, padT + plotH);
+        ctx.lineTo(padL, padT + plotH);
+        ctx.closePath();
+        ctx.fillStyle = s.fill;
+        ctx.fill();
+      }
+    });
+  }
+
+  function drawBarComparisonChart(canvas, candidates) {
+    if (!canvas) return;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = canvas.clientWidth || 440;
+    var h = canvas.clientHeight || 240;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    var ctx = canvas.getContext("2d");
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, w, h);
+
+    var padL = 38, padR = 16, padT = 20, padB = 42;
+    var plotW = w - padL - padR, plotH = h - padT - padB;
+    ctx.strokeStyle = "#1E293B";
+    ctx.font = "10px 'JetBrains Mono', monospace";
+    ctx.fillStyle = "#94A3B8";
+    for (var i = 0; i <= 4; i++) {
+      var gy = padT + (plotH * i) / 4;
+      ctx.beginPath(); ctx.moveTo(padL, gy); ctx.lineTo(w - padR, gy); ctx.stroke();
+      ctx.fillText(String(100 - i * 25), 6, gy + 3);
+    }
+
+    var groupW = plotW / candidates.length;
+    candidates.forEach(function (c, idx) {
+      var gx = padL + idx * groupW + groupW * 0.18;
+      var bw = (groupW * 0.64) / 2 - 2;
+      var vals = [
+        { v: c.weightedScore, col: "#06B6D4" },
+        { v: c.safetyScore, col: "#10B981" }
+      ];
+      vals.forEach(function (b, bi) {
+        var bh = (b.v / 100) * plotH;
+        ctx.fillStyle = b.col;
+        ctx.fillRect(gx + bi * (bw + 4), padT + plotH - bh, bw, bh);
+      });
+      ctx.fillStyle = "#CBD5E1";
+      ctx.font = "10px 'Plus Jakarta Sans', sans-serif";
+      ctx.fillText(c.name.replace(" 경로", "").slice(0, 7), gx - 2, h - 16);
+    });
+  }
+
+  function drawRadarComparisonChart(canvas, topCand, directCand) {
+    if (!canvas) return;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = canvas.clientWidth || 380;
+    var h = canvas.clientHeight || 240;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    var ctx = canvas.getContext("2d");
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, w, h);
+
+    var cx = w / 2, cy = h / 2 + 6, R = Math.min(w, h) * 0.34;
+    var labels = ["안전성", "비행시간", "배터리효율", "거리효율"];
+    var n = labels.length;
+
+    ctx.strokeStyle = "#1E293B";
+    for (var ring = 1; ring <= 4; ring++) {
+      ctx.beginPath();
+      for (var i = 0; i < n; i++) {
+        var ang = -Math.PI / 2 + (i * Math.PI * 2) / n;
+        var px = cx + Math.cos(ang) * R * (ring / 4);
+        var py = cy + Math.sin(ang) * R * (ring / 4);
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.stroke();
+    }
+
+    ctx.font = "11px 'Plus Jakarta Sans', sans-serif";
+    ctx.fillStyle = "#CBD5E1";
+    for (var i2 = 0; i2 < n; i2++) {
+      var ang2 = -Math.PI / 2 + (i2 * Math.PI * 2) / n;
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(ang2) * R, cy + Math.sin(ang2) * R); ctx.stroke();
+      ctx.fillText(labels[i2], cx + Math.cos(ang2) * (R + 18) - 20, cy + Math.sin(ang2) * (R + 18) + 4);
+    }
+
+    function drawPoly(scores, stroke, fill) {
+      ctx.beginPath();
+      scores.forEach(function (sc, idx) {
+        var ang = -Math.PI / 2 + (idx * Math.PI * 2) / n;
+        var r = (sc / 100) * R;
+        var px = cx + Math.cos(ang) * r;
+        var py = cy + Math.sin(ang) * r;
+        if (idx === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      });
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    drawPoly([directCand.safetyScore, directCand.timeScore, directCand.batteryScore, directCand.distanceScore], "#F59E0B", "rgba(245,158,11,0.12)");
+    drawPoly([topCand.safetyScore, topCand.timeScore, topCand.batteryScore, topCand.distanceScore], "#06B6D4", "rgba(6,182,212,0.24)");
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, function (m) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m];
+    });
+  }
+
+  // Central Shared Application State
+  var initSec = REAL_WORLD_SECTORS[0];
+  var state = {
+    activeSection: "simulator",
+    sectorId: initSec.id,
+    start: Object.assign({}, initSec.start),
+    goal: Object.assign({}, initSec.goal),
+    obstacles: initSec.obstacles.map(function (o) { return Object.assign({}, o); }),
+    droneSpec: {
+      massKg: 2.4,
+      batteryCapacityAh: 5.2,
+      batteryVoltageV: 22.2,
+      cruiseSpeedMs: 12.0,
+      altitudeM: initSec.defaultAltitudeM,
+      avgPowerW: 260,
+      windSpeedMs: initSec.defaultWindMs,
+      windDirectionDeg: initSec.defaultWindDirDeg,
+      currentBatteryPct: 92
+    },
+    astarOptions: { safetyMarginCells: 0.55, riskPenaltyWeight: 0.9, turnPenalty: 0.15, windShelterBonus: true },
+    sim: {
+      mode: "STANDBY",
+      speedMult: 1.5,
+      cameraPreset: "follow",
+      clickPlaceMode: false,
+      traveledM: 0,
+      remainingM: 0,
+      progressPct: 0,
+      liveSpeedMs: 0,
+      liveBatteryPct: 92,
+      gridPos: Object.assign({}, initSec.start)
+    },
+    vision: {
+      selectedSrc: SAMPLE_AERIAL_IMAGES[0].src,
+      selectedName: SAMPLE_AERIAL_IMAGES[0].title,
+      result: null,
+      selectedObsId: null
+    },
+    planningEditMode: "obstacle",
+    decisionHistory: [],
+    optimizationWeights: { safety: 40, time: 20, battery: 25, distance: 15 },
+    selectedOptId: null
+  };
+
+  function getSelectedSector() {
+    return REAL_WORLD_SECTORS.find(function (s) { return s.id === state.sectorId; }) || REAL_WORLD_SECTORS[0];
+  }
+  function getActivePath() {
+    return planAStarPath(state.start, state.goal, state.obstacles, state.droneSpec, state.astarOptions);
+  }
+  function showToast(msg) {
+    var box = document.getElementById("toast-box");
+    box.textContent = msg;
+    box.classList.add("show");
+    clearTimeout(box._t);
+    box._t = setTimeout(function () { box.classList.remove("show"); }, 4200);
+  }
+
+  // ======================== 3D REALISTIC LIVING-WORLD SIMULATOR ========================
+  var WORLD_SCALE = 2;
+  var METERS_PER_UNIT = CELL_SIZE_M / WORLD_SCALE;
+  var CORRIDOR_W = GRID_COLS * WORLD_SCALE;
+  var CORRIDOR_H = GRID_ROWS * WORLD_SCALE;
+  var simEngine = null;
+
+  function gridToWorldVec(gx, gy, altM) {
+    var wx = (gx - (GRID_COLS - 1) / 2) * WORLD_SCALE;
+    var wz = (gy - (GRID_ROWS - 1) / 2) * WORLD_SCALE;
+    var wy = (altM || 0) / METERS_PER_UNIT;
+    return { x: wx, y: wy, z: wz };
+  }
+  function worldToGridPt(wx, wz) {
+    return {
+      x: Math.max(0, Math.min(GRID_COLS - 1, Math.round(wx / WORLD_SCALE + (GRID_COLS - 1) / 2))),
+      y: Math.max(0, Math.min(GRID_ROWS - 1, Math.round(wz / WORLD_SCALE + (GRID_ROWS - 1) / 2)))
+    };
+  }
+
+  function createTerrainTexture(theme) {
+    var canvas = document.createElement("canvas");
+    canvas.width = 1024; canvas.height = 1024;
+    var ctx = canvas.getContext("2d");
+
+    if (theme === "riverfront") {
+      ctx.fillStyle = "#4d7c4f"; ctx.fillRect(0, 0, 1024, 1024);
+      ctx.fillStyle = "#5c8c59";
+      for (var i = 0; i < 16; i++) ctx.fillRect((i * 113) % 900, 255 + ((i * 71) % 210), 120, 75);
+      var wg = ctx.createLinearGradient(0, 0, 0, 245);
+      wg.addColorStop(0, "#1e567c"); wg.addColorStop(1, "#2c7da0");
+      ctx.fillStyle = wg; ctx.fillRect(0, 0, 1024, 245);
+      ctx.fillStyle = "#cbd5e1"; ctx.fillRect(0, 245, 1024, 34);
+      ctx.fillStyle = "#b45309"; ctx.fillRect(0, 286, 1024, 16);
+      ctx.fillStyle = "#64748b"; ctx.fillRect(0, 526, 1024, 498);
+      ctx.fillStyle = "#27303f";
+      ctx.fillRect(0, 440, 1024, 86);
+      ctx.fillRect(260, 440, 56, 584);
+      ctx.fillRect(680, 440, 56, 584);
+      ctx.fillStyle = "#facc15"; ctx.fillRect(0, 481, 1024, 4);
+      ctx.strokeStyle = "#f8fafc"; ctx.lineWidth = 2.5; ctx.setLineDash([22, 18]);
+      ctx.beginPath();
+      ctx.moveTo(0, 460); ctx.lineTo(1024, 460);
+      ctx.moveTo(0, 505); ctx.lineTo(1024, 505);
+      ctx.stroke(); ctx.setLineDash([]);
+    } else if (theme === "urban") {
+      ctx.fillStyle = "#525e6e"; ctx.fillRect(0, 0, 1024, 1024);
+      ctx.fillStyle = "#707e90";
+      for (var gx = 32; gx < 980; gx += 230) for (var gy = 32; gy < 980; gy += 230) ctx.fillRect(gx, gy, 180, 170);
+      ctx.fillStyle = "#1e293b";
+      ctx.fillRect(0, 430, 1024, 130);
+      ctx.fillRect(230, 0, 82, 1024);
+      ctx.fillRect(690, 0, 82, 1024);
+      ctx.fillStyle = "#facc15";
+      ctx.fillRect(0, 493, 1024, 5); ctx.fillRect(269, 0, 4, 1024); ctx.fillRect(729, 0, 4, 1024);
+      ctx.strokeStyle = "#e2e8f0"; ctx.lineWidth = 2.5; ctx.setLineDash([24, 20]);
+      ctx.beginPath(); ctx.moveTo(0, 462); ctx.lineTo(1024, 462); ctx.moveTo(0, 526); ctx.lineTo(1024, 526); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = "#f8fafc";
+      for (var s = 440; s < 550; s += 16) {
+        ctx.fillRect(202, s, 22, 8); ctx.fillRect(318, s, 22, 8);
+        ctx.fillRect(662, s, 22, 8); ctx.fillRect(778, s, 22, 8);
+      }
+    } else if (theme === "port") {
+      ctx.fillStyle = "#5b6472"; ctx.fillRect(0, 0, 1024, 1024);
+      var sg = ctx.createLinearGradient(0, 740, 0, 1024);
+      sg.addColorStop(0, "#0e7490"); sg.addColorStop(1, "#0c4a6e");
+      ctx.fillStyle = sg; ctx.fillRect(0, 740, 1024, 284); ctx.fillRect(790, 0, 234, 1024);
+      ctx.fillStyle = "#eab308"; ctx.fillRect(0, 728, 796, 12); ctx.fillRect(778, 0, 12, 740);
+      ctx.fillStyle = "#27303f"; ctx.fillRect(0, 340, 778, 68);
+      ctx.fillStyle = "#facc15"; ctx.fillRect(0, 372, 778, 3);
+    } else {
+      ctx.fillStyle = "#538050"; ctx.fillRect(0, 0, 1024, 1024);
+      ctx.fillStyle = "#2563eb";
+      ctx.beginPath(); ctx.ellipse(512, 260, 145, 78, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#cbd5e1"; ctx.lineWidth = 6; ctx.stroke();
+      ctx.fillStyle = "#788496"; ctx.fillRect(90, 470, 270, 220); ctx.fillRect(620, 470, 270, 220);
+      ctx.fillStyle = "#27303f"; ctx.fillRect(0, 390, 1024, 62); ctx.fillRect(465, 0, 62, 1024);
+      ctx.fillStyle = "#facc15"; ctx.fillRect(0, 419, 1024, 3); ctx.fillRect(494, 0, 3, 1024);
+    }
+    var tex = new THREE.CanvasTexture(canvas);
+    tex.encoding = THREE.sRGBEncoding;
+    return tex;
+  }
+
+  function createFacadeTexture() {
+    var canvas = document.createElement("canvas");
+    canvas.width = 256; canvas.height = 512;
+    var ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#64748b"; ctx.fillRect(0, 0, 256, 512);
+    for (var y = 16; y < 496; y += 26) {
+      ctx.fillStyle = "#475569"; ctx.fillRect(0, y - 4, 256, 4);
+      for (var x = 14; x < 242; x += 28) {
+        ctx.fillStyle = (x + y) % 5 === 0 ? "#e0f2fe" : "#1e3a5f";
+        ctx.fillRect(x, y, 20, 16);
+      }
+    }
+    var tex = new THREE.CanvasTexture(canvas);
+    tex.encoding = THREE.sRGBEncoding;
+    tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
+    return tex;
+  }
+
+  function init3DSimulator(mountEl) {
+    if (simEngine && simEngine.mountEl === mountEl) {
+      simEngine.resize();
+      return;
+    }
+    if (simEngine) { simEngine.dispose(); simEngine = null; }
+
+    // Graceful 2D Canvas fallback if Three.js CDN failed or WebGL unavailable
+    if (typeof THREE === "undefined") {
+      mountEl.innerHTML = '<canvas id="fallback-sim-canvas" style="width:100%;height:100%;display:block;"></canvas>';
+      var fc = document.getElementById("fallback-sim-canvas");
+      var fTimer = setInterval(function () {
+        if (!document.body.contains(fc)) { clearInterval(fTimer); return; }
+        var w = mountEl.clientWidth || 900, h = mountEl.clientHeight || 520;
+        fc.width = w; fc.height = h;
+        var g = fc.getContext("2d");
+        g.fillStyle = "#3b82f6"; g.fillRect(0, 0, w, h * 0.28);
+        g.fillStyle = "#4d7c4f"; g.fillRect(0, h * 0.28, w, h * 0.72);
+        var path = getActivePath();
+        g.strokeStyle = "#22d3ee"; g.lineWidth = 3;
+        g.beginPath();
+        path.waypoints.forEach(function (wp, i) {
+          var px = (wp.x / GRID_COLS) * w, py = h * 0.3 + (wp.y / GRID_ROWS) * h * 0.65;
+          if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
+        });
+        g.stroke();
+        g.fillStyle = "#ffffff"; g.font = "13px sans-serif";
+        g.fillText("오프라인 2D 비행 시뮬레이션 모드 (인터넷 연결 시 3D 실사 렌더링 자동 활성화)", 18, 28);
+      }, 200);
+      simEngine = { mountEl: mountEl, resize: function () {}, rebuild: function () {}, refreshTheme: function () {}, setMode: function () {}, setCamera: function () {}, dispose: function () { clearInterval(fTimer); } };
+      return;
+    }
+
+    var isSoftwareGl = false;
+    try {
+      var testGl = document.createElement("canvas").getContext("webgl");
+      if (!testGl) isSoftwareGl = true;
+      else {
+        var ext = testGl.getExtension("WEBGL_debug_renderer_info");
+        var gpu = ext ? String(testGl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : "";
+        if (/SwiftShader|llvmpipe|softpipe|Software/i.test(gpu)) isSoftwareGl = true;
+      }
+    } catch (e) { isSoftwareGl = true; }
+
+    var renderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: !isSoftwareGl, powerPreference: "high-performance" });
+    } catch (err) {
+      mountEl.innerHTML = '<div style="padding:32px;color:#fda4af;">WebGL 컨텍스트를 생성할 수 없습니다.</div>';
+      return;
+    }
+
+    var width = mountEl.clientWidth || 1000;
+    var height = mountEl.clientHeight || 580;
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(window.devicePixelRatio || 1, 2));
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+    renderer.shadowMap.enabled = !isSoftwareGl;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    var canvas = renderer.domElement;
+    canvas.style.display = "block"; canvas.style.width = "100%"; canvas.style.height = "100%";
+    mountEl.innerHTML = "";
+    mountEl.appendChild(canvas);
+
+    var scene = new THREE.Scene();
+    var skyCanvas = document.createElement("canvas");
+    skyCanvas.width = 16; skyCanvas.height = 512;
+    var sctx = skyCanvas.getContext("2d");
+    var sgrad = sctx.createLinearGradient(0, 0, 0, 512);
+    sgrad.addColorStop(0.0, "#1d4ed8"); sgrad.addColorStop(0.38, "#3b82f6");
+    sgrad.addColorStop(0.74, "#93c5fd"); sgrad.addColorStop(1.0, "#e0f2fe");
+    sctx.fillStyle = sgrad; sctx.fillRect(0, 0, 16, 512);
+    var skyTex = new THREE.CanvasTexture(skyCanvas);
+    skyTex.encoding = THREE.sRGBEncoding;
+    scene.background = skyTex;
+    scene.fog = new THREE.FogExp2(0xcbe3f7, 0.0046);
+
+    var camera = new THREE.PerspectiveCamera(52, width / height, 0.1, 300);
+    camera.position.set(-22, 20, 26);
+
+    var controls = THREE.OrbitControls ? new THREE.OrbitControls(camera, canvas) : null;
+    if (controls) {
+      controls.enableDamping = !isSoftwareGl;
+      controls.dampingFactor = 0.06;
+      controls.maxPolarAngle = Math.PI / 2 - 0.04;
+      controls.minDistance = 6; controls.maxDistance = 95;
+    }
+
+    scene.add(new THREE.HemisphereLight(0x93c5fd, 0x5c6654, 1.05));
+    var sunLight = new THREE.DirectionalLight(0xfff7e6, 1.85);
+    sunLight.position.set(34, 50, 24);
+    sunLight.castShadow = !isSoftwareGl;
+    sunLight.shadow.mapSize.set(1024, 1024);
+    sunLight.shadow.camera.left = -36; sunLight.shadow.camera.right = 36;
+    sunLight.shadow.camera.top = 36; sunLight.shadow.camera.bottom = -36;
+    scene.add(sunLight);
+    var fillLight = new THREE.DirectionalLight(0xbae6fd, 0.55);
+    fillLight.position.set(-28, 18, -24);
+    scene.add(fillLight);
+
+    var terrainTex = createTerrainTexture(getSelectedSector().theme);
+    var terrainMat = new THREE.MeshStandardMaterial({ map: terrainTex, roughness: 0.88, metalness: 0.04 });
+    var groundMesh = new THREE.Mesh(new THREE.PlaneGeometry(CORRIDOR_W, CORRIDOR_H), terrainMat);
+    groundMesh.rotation.x = -Math.PI / 2; groundMesh.receiveShadow = true;
+    scene.add(groundMesh);
+
+    var apron = new THREE.Mesh(new THREE.PlaneGeometry(320, 260), new THREE.MeshStandardMaterial({ color: 0x5c7d5e, roughness: 0.95 }));
+    apron.rotation.x = -Math.PI / 2; apron.position.y = -0.05; apron.receiveShadow = true;
+    scene.add(apron);
+
+    // Distant Mountain Ridges
+    [[-72,-62,28,16,0x4b6b5c],[-35,-70,34,21,0x52746a],[12,-74,38,24,0x5b7f7b],[58,-64,30,17,0x4c6e63],[82,-18,26,15,0x53756c],[-84,10,28,16,0x4e7060],[-45,70,32,18,0x577b6f],[25,72,34,19,0x5b7d75]].forEach(function (m) {
+      var ridge = new THREE.Mesh(new THREE.ConeGeometry(m[2], m[3], 7), new THREE.MeshStandardMaterial({ color: m[4], roughness: 0.95, flatShading: true }));
+      ridge.position.set(m[0], m[3] / 2 - 0.5, m[1]); ridge.rotation.y = m[0] * 0.2;
+      scene.add(ridge);
+    });
+
+    // Volumetric 3D Drifting Clouds
+    var cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xe2e8f0, emissiveIntensity: 0.28, roughness: 0.95, transparent: true, opacity: 0.92 });
+    var cloudActors = [];
+    [[-48,22,-32,2.1],[-18,25,-42,2.6],[24,21,-36,2.3],[56,26,-24,2.4],[-54,20,8,1.9],[-8,27,4,2.2],[34,23,12,2.5],[-32,24,34,2.0],[16,22,40,2.4],[58,25,32,2.1],[-62,19,-12,1.8],[4,29,-16,2.7]].forEach(function (cc, idx) {
+      var cg = new THREE.Group();
+      [[0,0,0,1.5],[1.35,-0.15,0.25,1.15],[-1.3,-0.2,-0.15,1.2],[0.55,0.65,-0.1,1.05],[-0.5,0.55,0.25,0.95],[2.25,-0.35,-0.1,0.8]].forEach(function (p) {
+        var puff = new THREE.Mesh(new THREE.SphereGeometry(p[3], 10, 8), cloudMat);
+        puff.position.set(p[0], p[1], p[2]); puff.scale.set(1.25, 0.72, 0.95);
+        cg.add(puff);
+      });
+      cg.scale.setScalar(cc[3]); cg.position.set(cc[0], cc[1], cc[2]);
+      scene.add(cg);
+      cloudActors.push({ group: cg, speedFactor: 0.7 + (idx % 4) * 0.2, bobPhase: idx * 1.1 });
+    });
+
+    var borderLine = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(CORRIDOR_W, 0.06, CORRIDOR_H)), new THREE.LineBasicMaterial({ color: 0x0284c7, transparent: true, opacity: 0.5 }));
+    borderLine.position.y = 0.04;
+    scene.add(borderLine);
+
+    var sceneryGroup = new THREE.Group();
+    scene.add(sceneryGroup);
+    var trafficActors = [];
+
+    function makeVehicle(kind, col) {
+      var g = new THREE.Group();
+      var bMat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.35, metalness: 0.45 });
+      var gMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.15, metalness: 0.75 });
+      var wMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.85 });
+      if (kind === "bus") {
+        var b = new THREE.Mesh(new THREE.BoxGeometry(1.55, 0.52, 0.48), bMat); b.position.y = 0.34; b.castShadow = true; g.add(b);
+        var gl = new THREE.Mesh(new THREE.BoxGeometry(1.38, 0.18, 0.5), gMat); gl.position.y = 0.42; g.add(gl);
+      } else if (kind === "truck") {
+        var cg = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.54, 0.52), new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.55 })); cg.position.set(-0.22, 0.36, 0); cg.castShadow = true; g.add(cg);
+        var cb = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.42, 0.48), bMat); cb.position.set(0.54, 0.3, 0); cb.castShadow = true; g.add(cb);
+      } else {
+        var len = kind === "suv" ? 0.92 : 0.85, h = kind === "suv" ? 0.24 : 0.2;
+        var lw = new THREE.Mesh(new THREE.BoxGeometry(len, h, 0.42), bMat); lw.position.y = 0.18; lw.castShadow = true; g.add(lw);
+        var ca = new THREE.Mesh(new THREE.BoxGeometry(len * 0.55, h * 0.85, 0.36), gMat); ca.position.set(-0.04, 0.18 + h * 0.8, 0); g.add(ca);
+      }
+      var wo = (kind === "bus" || kind === "truck") ? 0.52 : 0.26;
+      [-wo, wo].forEach(function (wx) {
+        [-0.21, 0.21].forEach(function (wz) {
+          var wh = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.06, 8), wMat);
+          wh.rotation.x = Math.PI / 2; wh.position.set(wx, 0.09, wz); g.add(wh);
+        });
+      });
+      return g;
+    }
+
+    function makeBoat(col) {
+      var g = new THREE.Group();
+      var hull = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.45, 0.95), new THREE.MeshStandardMaterial({ color: col, roughness: 0.5 })); hull.position.y = 0.2; g.add(hull);
+      var house = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.5, 0.72), new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.4 })); house.position.set(-0.2, 0.62, 0); g.add(house);
+      return g;
+    }
+
+    function makeTree(sc) {
+      var g = new THREE.Group();
+      var tr = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.14, 0.75, 7), new THREE.MeshStandardMaterial({ color: 0x6b3e26, roughness: 0.9 })); tr.position.y = 0.375; g.add(tr);
+      var c1 = new THREE.Mesh(new THREE.DodecahedronGeometry(0.55, 1), new THREE.MeshStandardMaterial({ color: 0x2d6a4f, roughness: 0.85 })); c1.position.y = 1.0; g.add(c1);
+      var c2 = new THREE.Mesh(new THREE.DodecahedronGeometry(0.38, 1), new THREE.MeshStandardMaterial({ color: 0x52b788, roughness: 0.82 })); c2.position.y = 1.38; g.add(c2);
+      g.scale.setScalar(sc || 1);
+      return g;
+    }
+
+    function makeLamp() {
+      var g = new THREE.Group();
+      var pMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.35, metalness: 0.7 });
+      var pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.06, 1.5, 6), pMat); pole.position.y = 0.75; g.add(pole);
+      var bulb = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.05, 0.1), new THREE.MeshBasicMaterial({ color: 0xfef3c7 })); bulb.position.set(0.28, 1.45, 0); g.add(bulb);
+      return g;
+    }
+
+    function populateScenery(theme) {
+      while (sceneryGroup.children.length) sceneryGroup.remove(sceneryGroup.children[0]);
+      trafficActors.length = 0;
+      var pal = [0xf8fafc, 0x1e293b, 0x2563eb, 0xdc2626, 0xf59e0b, 0x94a3b8, 0x059669];
+      function spawnCars(axis, fixedCoord, count, speed, minB, maxB, incBus) {
+        for (var i = 0; i < count; i++) {
+          var kind = (incBus && i % 4 === 0) ? "bus" : (i % 3 === 0 ? "truck" : (i % 2 === 0 ? "suv" : "sedan"));
+          var car = makeVehicle(kind, pal[(i * 3 + Math.abs(Math.round(fixedCoord))) % pal.length]);
+          var t = minB + ((maxB - minB) * (i + 0.35)) / count;
+          if (axis === "x") { car.position.set(t, 0.02, fixedCoord); car.rotation.y = speed >= 0 ? 0 : Math.PI; }
+          else { car.position.set(fixedCoord, 0.02, t); car.rotation.y = speed >= 0 ? -Math.PI / 2 : Math.PI / 2; }
+          sceneryGroup.add(car);
+          trafficActors.push({ mesh: car, axis: axis, speed: speed * (0.9 + (i % 3) * 0.1), minB: minB, maxB: maxB, baseY: 0.02 });
+        }
+      }
+
+      if (theme === "riverfront") {
+        spawnCars("x", -2.05, 6, -4.6, -29, 29, true);
+        spawnCars("x", -0.35, 6, 4.9, -29, 29, true);
+        spawnCars("z", -13.1, 3, 3.4, -2.5, 19, false);
+        spawnCars("z", 11.5, 3, -3.6, -2.5, 19, false);
+        var b1 = makeBoat(0x1d4ed8); b1.position.set(-16, 0.04, -14.8); sceneryGroup.add(b1);
+        trafficActors.push({ mesh: b1, axis: "x", speed: 2.1, minB: -28, maxB: 28, baseY: 0.04, isBoat: true });
+        var b2 = makeBoat(0xb91c1c); b2.position.set(14, 0.04, -17.2); b2.rotation.y = Math.PI; sceneryGroup.add(b2);
+        trafficActors.push({ mesh: b2, axis: "x", speed: -1.7, minB: -28, maxB: 28, baseY: 0.04, isBoat: true });
+        var deck = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.35, 12.5), new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.6 }));
+        deck.position.set(-12, 1.35, -14.2); sceneryGroup.add(deck);
+        [-17.5, -12.0].forEach(function (pz) {
+          var arch = new THREE.Mesh(new THREE.BoxGeometry(2.9, 3.6, 0.45), new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.45 }));
+          arch.position.set(-12, 2.1, pz); sceneryGroup.add(arch);
+        });
+        for (var x = -27; x <= 27; x += 4.5) {
+          var t = makeTree(1); t.position.set(x, 0, -7.2 + (x % 2) * 0.6); sceneryGroup.add(t);
+          var lp = makeLamp(); lp.position.set(x, 0, -3.15); lp.rotation.y = -Math.PI / 2; sceneryGroup.add(lp);
+        }
+      } else if (theme === "urban") {
+        spawnCars("x", -2.35, 6, -5.2, -29, 29, true);
+        spawnCars("x", 0.35, 6, 5.4, -29, 29, true);
+        spawnCars("z", -14.8, 4, 3.8, -19, 19, false);
+        spawnCars("z", 12.1, 4, 3.9, -19, 19, false);
+        for (var ux = -27; ux <= 27; ux += 5) {
+          if (Math.abs(ux + 14.1) < 3 || Math.abs(ux - 12.8) < 3) continue;
+          var ut = makeTree(0.9); ut.position.set(ux, 0, -3.85); sceneryGroup.add(ut);
+          var ul = makeLamp(); ul.position.set(ux + 2, 0, -3.45); ul.rotation.y = -Math.PI / 2; sceneryGroup.add(ul);
+        }
+      } else if (theme === "port") {
+        spawnCars("x", -6.1, 5, -4.2, -28, 15, true);
+        spawnCars("x", -4.7, 5, 4.5, -28, 15, true);
+        var sh = makeBoat(0x0f766e); sh.scale.set(1.5, 1.4, 1.5); sh.position.set(-10, 0.05, 14.5); sceneryGroup.add(sh);
+        trafficActors.push({ mesh: sh, axis: "x", speed: 1.6, minB: -27, maxB: 26, baseY: 0.05, isBoat: true });
+        var cCols = [0xdc2626, 0x2563eb, 0x059669, 0xd97706];
+        for (var ci = 0; ci < 10; ci++) {
+          var ct = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.68, 0.95), new THREE.MeshStandardMaterial({ color: cCols[ci % cCols.length], roughness: 0.55 }));
+          ct.position.set(-22 + (ci % 4) * 9.5, 0.34, 1.5 + Math.floor(ci / 4) * 3.4); sceneryGroup.add(ct);
+        }
+      } else {
+        spawnCars("x", -4.0, 5, -4.4, -29, 29, true);
+        spawnCars("x", -2.9, 5, 4.6, -29, 29, true);
+        spawnCars("z", -1.4, 4, 3.6, -19, 19, false);
+        [[-22,-13],[-16,-15],[11,-13],[18,-11],[-24,6],[19,15]].forEach(function (p) {
+          var pt = makeTree(1.1); pt.position.set(p[0], 0, p[1]); sceneryGroup.add(pt);
+        });
+      }
+    }
+    populateScenery(getSelectedSector().theme);
+
+    // Quadrotor Drone Mesh
+    var droneGroup = new THREE.Group();
+    var rotors = [];
+    var hull = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.22, 1.05), new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.35, metalness: 0.55 }));
+    hull.castShadow = true; droneGroup.add(hull);
+    var canopy = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.34, 0.16, 6), new THREE.MeshStandardMaterial({ color: 0x06b6d4, roughness: 0.25, metalness: 0.6 }));
+    canopy.position.set(0, 0.16, -0.05); droneGroup.add(canopy);
+    var fLed = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), new THREE.MeshBasicMaterial({ color: 0x22d3ee })); fLed.position.set(0, 0.04, 0.54); droneGroup.add(fLed);
+    var rLed = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), new THREE.MeshBasicMaterial({ color: 0xf59e0b })); rLed.position.set(0, 0.04, -0.54); droneGroup.add(rLed);
+    [Math.PI * 0.25, Math.PI * 0.75, Math.PI * 1.25, Math.PI * 1.75].forEach(function (ang) {
+      var ax = Math.cos(ang) * 0.92, az = Math.sin(ang) * 0.92;
+      var arm = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.92, 8), new THREE.MeshStandardMaterial({ color: 0x334155 }));
+      arm.position.set(ax * 0.5, 0.04, az * 0.5); arm.rotation.z = Math.PI / 2; arm.rotation.y = -ang; droneGroup.add(arm);
+      var rg = new THREE.Group(); rg.position.set(ax, 0.19, az);
+      var rMat = new THREE.MeshBasicMaterial({ color: 0xe2e8f0, transparent: true, opacity: 0.6 });
+      rg.add(new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.015, 0.07), rMat), new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.015, 0.74), rMat));
+      droneGroup.add(rg); rotors.push(rg);
+    });
+    scene.add(droneGroup);
+
+    var contactShadow = new THREE.Mesh(new THREE.CircleGeometry(0.85, 20), new THREE.MeshBasicMaterial({ color: 0x0f172a, transparent: true, opacity: 0.3, depthWrite: false }));
+    contactShadow.rotation.x = -Math.PI / 2; contactShadow.position.y = 0.03; scene.add(contactShadow);
+
+    // Wind Airflow Particles
+    var windCount = 180;
+    var windPos = new Float32Array(windCount * 3);
+    for (var wi = 0; wi < windCount; wi++) {
+      windPos[wi * 3] = (Math.random() - 0.5) * 62;
+      windPos[wi * 3 + 1] = 1.5 + Math.random() * 14;
+      windPos[wi * 3 + 2] = (Math.random() - 0.5) * 42;
+    }
+    var windGeo = new THREE.BufferGeometry();
+    windGeo.setAttribute("position", new THREE.BufferAttribute(windPos, 3));
+    scene.add(new THREE.Points(windGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.16, transparent: true, opacity: 0.5 })));
+
+    var facadeTex = createFacadeTexture();
+    var dynamicGroup = new THREE.Group();
+    scene.add(dynamicGroup);
+
+    var simInternal = {
+      path: getActivePath(),
+      prevPath: null,
+      dronePos: gridToWorldVec(state.start.x, state.start.y, state.droneSpec.altitudeM),
+      wpIdx: 1,
+      camPending: false
+    };
+    droneGroup.position.set(simInternal.dronePos.x, simInternal.dronePos.y, simInternal.dronePos.z);
+
+    function rebuildDynamic() {
+      while (dynamicGroup.children.length) dynamicGroup.remove(dynamicGroup.children[0]);
+      var sp = gridToWorldVec(state.start.x, state.start.y, 0);
+      var sPad = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.3, 0.16, 20), new THREE.MeshStandardMaterial({ color: 0x10b981 }));
+      sPad.position.set(sp.x, 0.08, sp.z); dynamicGroup.add(sPad);
+
+      var gp = gridToWorldVec(state.goal.x, state.goal.y, 0);
+      var gPad = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.3, 0.16, 6), new THREE.MeshStandardMaterial({ color: 0x2563eb }));
+      gPad.position.set(gp.x, 0.08, gp.z); dynamicGroup.add(gPad);
+      var gPil = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 10, 10), new THREE.MeshBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.45 }));
+      gPil.position.set(gp.x, 5, gp.z); dynamicGroup.add(gPil);
+
+      state.obstacles.forEach(function (obs) {
+        var g = new THREE.Group();
+        var op = gridToWorldVec(obs.x, obs.y, 0);
+        g.position.set(op.x, 0, op.z);
+        var wr = obs.radius * WORLD_SCALE, wh = Math.max(1.2, obs.heightM / METERS_PER_UNIT);
+        var rc = obs.riskLevel === "high" ? 0xef4444 : obs.riskLevel === "medium" ? 0xf59e0b : 0x0284c7;
+        var ring = new THREE.Mesh(new THREE.RingGeometry(wr * 0.9, wr, 24), new THREE.MeshBasicMaterial({ color: rc, transparent: true, opacity: 0.72, side: THREE.DoubleSide }));
+        ring.rotation.x = -Math.PI / 2; ring.position.y = 0.04; g.add(ring);
+        if (obs.category === "building") {
+          var b = new THREE.Mesh(new THREE.BoxGeometry(wr * 1.25, wh, wr * 1.25), new THREE.MeshStandardMaterial({ map: facadeTex, color: 0xe2e8f0, roughness: 0.45 }));
+          b.position.y = wh / 2; b.castShadow = true; g.add(b);
+          var bc = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 8), new THREE.MeshBasicMaterial({ color: rc }));
+          bc.position.y = wh + 0.3; g.add(bc);
+        } else if (obs.category === "tree") {
+          var t = makeTree(Math.max(1.1, wh * 0.8)); g.add(t);
+        } else if (obs.category === "powerline") {
+          var py = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.42, wh, 4), new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.7 }));
+          py.position.y = wh / 2; g.add(py);
+          var wrMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, wr * 1.9, 6), new THREE.MeshBasicMaterial({ color: 0xf59e0b }));
+          wrMesh.rotation.z = Math.PI / 2; wrMesh.position.y = wh * 0.88; g.add(wrMesh);
+        } else if (obs.category === "vehicle") {
+          var vh = makeVehicle("bus", 0x0284c7); vh.scale.setScalar(1.35); g.add(vh);
+        } else {
+          var pil = new THREE.Mesh(new THREE.CylinderGeometry(wr * 0.45, wr * 0.6, wh, 14), new THREE.MeshStandardMaterial({ color: rc, transparent: true, opacity: 0.65 }));
+          pil.position.y = wh / 2; g.add(pil);
+        }
+        dynamicGroup.add(g);
+      });
+
+      if (simInternal.path.waypoints.length >= 2) {
+        var pts = simInternal.path.waypoints.map(function (wp) {
+          var v = gridToWorldVec(wp.x, wp.y, state.droneSpec.altitudeM);
+          return new THREE.Vector3(v.x, v.y, v.z);
+        });
+        var curve = new THREE.CatmullRomCurve3(pts);
+        var tCol = state.sim.mode === "RTH" ? 0xf43f5e : state.sim.mode === "AVOIDING" ? 0xf59e0b : 0x06b6d4;
+        dynamicGroup.add(new THREE.Mesh(new THREE.TubeGeometry(curve, Math.max(20, pts.length * 3), 0.13, 8, false), new THREE.MeshBasicMaterial({ color: tCol })));
+      }
+    }
+    rebuildDynamic();
+
+    var raycaster = new THREE.Raycaster();
+    var pNdc = new THREE.Vector2();
+    var gPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    var hitVec = new THREE.Vector3();
+    canvas.addEventListener("click", function (ev) {
+      if (!state.sim.clickPlaceMode) return;
+      var rect = canvas.getBoundingClientRect();
+      pNdc.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+      pNdc.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(pNdc, camera);
+      if (raycaster.ray.intersectPlane(gPlane, hitVec)) {
+        var gp = worldToGridPt(hitVec.x, hitVec.z);
+        addObstacleAndReroute(gp, true);
+      }
+    });
+
+    var _tVec = new THREE.Vector3(), _dVec = new THREE.Vector3(), _cDes = new THREE.Vector3(), _lDes = new THREE.Vector3();
+    var disposed = false, rafId = 0, lastT = performance.now(), hudAcc = 0;
+
+    function tick() {
+      if (disposed) return;
+      var now = performance.now();
+      var dt = Math.min(0.08, (now - lastT) / 1000);
+      lastT = now;
+
+      var rRate = state.sim.mode === "STANDBY" ? 6 : state.sim.mode === "PAUSED" ? 2 : 28;
+      for (var ri = 0; ri < rotors.length; ri++) rotors[ri].rotation.y += dt * rRate * (ri % 2 === 0 ? 1 : -1);
+
+      // Drift 3D Clouds with wind
+      var wRad = (state.droneSpec.windDirectionDeg * Math.PI) / 180;
+      var cBase = Math.max(0.8, state.droneSpec.windSpeedMs * 0.22);
+      var cvx = Math.sin(wRad) * cBase, cvz = -Math.cos(wRad) * cBase;
+      for (var ci = 0; ci < cloudActors.length; ci++) {
+        var ca = cloudActors[ci];
+        ca.group.position.x += cvx * ca.speedFactor * dt;
+        ca.group.position.z += cvz * ca.speedFactor * dt;
+        ca.group.position.y += Math.sin(now * 0.0008 + ca.bobPhase) * 0.004;
+        if (ca.group.position.x > 74) ca.group.position.x = -74;
+        if (ca.group.position.x < -74) ca.group.position.x = 74;
+        if (ca.group.position.z > 58) ca.group.position.z = -58;
+        if (ca.group.position.z < -58) ca.group.position.z = 58;
+      }
+
+      // Move Road Cars & Boats
+      for (var ti = 0; ti < trafficActors.length; ti++) {
+        var ac = trafficActors[ti];
+        if (ac.axis === "x") {
+          ac.mesh.position.x += ac.speed * dt;
+          if (ac.mesh.position.x > ac.maxB) ac.mesh.position.x = ac.minB;
+          if (ac.mesh.position.x < ac.minB) ac.mesh.position.x = ac.maxB;
+        } else {
+          ac.mesh.position.z += ac.speed * dt;
+          if (ac.mesh.position.z > ac.maxB) ac.mesh.position.z = ac.minB;
+          if (ac.mesh.position.z < ac.minB) ac.mesh.position.z = ac.maxB;
+        }
+        if (ac.isBoat) ac.mesh.position.y = ac.baseY + Math.sin(now * 0.002 + ti) * 0.04;
+      }
+
+      // Wind Particles
+      var wAttr = windGeo.attributes.position;
+      var wxv = Math.sin(wRad) * (state.droneSpec.windSpeedMs * 0.45);
+      var wzv = -Math.cos(wRad) * (state.droneSpec.windSpeedMs * 0.45);
+      for (var pi = 0; pi < windCount; pi++) {
+        var px = wAttr.getX(pi) + wxv * dt, pz = wAttr.getZ(pi) + wzv * dt;
+        if (px > 31) px = -31; if (px < -31) px = 31;
+        if (pz > 21) pz = -21; if (pz < -21) pz = 21;
+        wAttr.setX(pi, px); wAttr.setZ(pi, pz);
+      }
+      wAttr.needsUpdate = true;
+
+      // Advance Drone Along A* Path
+      var perf = computeEffectiveFlightMetrics(state.droneSpec);
+      var spd = 0;
+      if (state.sim.mode === "EN_ROUTE" || state.sim.mode === "AVOIDING" || state.sim.mode === "RTH") {
+        var wps = simInternal.path.waypoints;
+        if (simInternal.wpIdx < wps.length) {
+          var wp = wps[simInternal.wpIdx];
+          var tv = gridToWorldVec(wp.x, wp.y, state.droneSpec.altitudeM);
+          _tVec.set(tv.x, tv.y, tv.z);
+          _dVec.set(_tVec.x - simInternal.dronePos.x, _tVec.y - simInternal.dronePos.y, _tVec.z - simInternal.dronePos.z);
+          var distU = _dVec.length();
+          spd = perf.effectiveGroundSpeedMs;
+          var stepU = (spd / METERS_PER_UNIT) * dt * state.sim.speedMult;
+          if (distU <= stepU + 0.05) {
+            simInternal.dronePos.x = _tVec.x; simInternal.dronePos.y = _tVec.y; simInternal.dronePos.z = _tVec.z;
+            state.sim.traveledM += distU * METERS_PER_UNIT;
+            simInternal.wpIdx++;
+            if (simInternal.wpIdx >= wps.length) {
+              state.sim.mode = "COMPLETED";
+              updateSimHudBanner("비행 경로의 최종 목적지에 안전하게 도달했습니다.");
+            }
+          } else {
+            _dVec.normalize();
+            simInternal.dronePos.x += _dVec.x * stepU;
+            simInternal.dronePos.y += _dVec.y * stepU;
+            simInternal.dronePos.z += _dVec.z * stepU;
+            state.sim.traveledM += stepU * METERS_PER_UNIT;
+            droneGroup.rotation.y = THREE.MathUtils.damp(droneGroup.rotation.y, Math.atan2(_dVec.x, _dVec.z), 8, dt);
+            droneGroup.rotation.x = THREE.MathUtils.damp(droneGroup.rotation.x, 0.16 + Math.min(0.18, state.droneSpec.windSpeedMs * 0.01), 6, dt);
+          }
+
+          var drop = perf.nominalEnergyWh > 0 ? ((perf.effectivePowerW * ((dt * state.sim.speedMult) / 3600)) / perf.nominalEnergyWh) * 100 * 12 : 0;
+          state.sim.liveBatteryPct = Math.max(0, state.sim.liveBatteryPct - drop);
+          if (state.sim.liveBatteryPct <= 18 && state.sim.mode !== "RTH") {
+            var curG = worldToGridPt(simInternal.dronePos.x, simInternal.dronePos.z);
+            simInternal.prevPath = simInternal.path;
+            simInternal.path = planAStarPath(curG, state.start, state.obstacles, state.droneSpec, { safetyMarginCells: 0.45 });
+            simInternal.wpIdx = 1;
+            state.sim.mode = "RTH";
+            rebuildDynamic();
+            updateSimHudBanner("배터리 " + state.sim.liveBatteryPct.toFixed(1) + "% 임계치 도달 → 자동 복귀(RTH) 활성화");
+          }
+        }
+      } else {
+        droneGroup.rotation.x = THREE.MathUtils.damp(droneGroup.rotation.x, 0, 5, dt);
+        if (state.sim.mode === "STANDBY") {
+          var sv = gridToWorldVec(state.start.x, state.start.y, state.droneSpec.altitudeM);
+          simInternal.dronePos.x = sv.x; simInternal.dronePos.y = sv.y; simInternal.dronePos.z = sv.z;
+        }
+      }
+
+      var bob = state.sim.mode === "COMPLETED" ? 0 : Math.sin(now * 0.004) * 0.08;
+      droneGroup.position.set(simInternal.dronePos.x, simInternal.dronePos.y + bob, simInternal.dronePos.z);
+      contactShadow.position.set(simInternal.dronePos.x, 0.03, simInternal.dronePos.z);
+
+      if (controls) {
+        if (state.sim.cameraPreset === "follow" && (state.sim.mode === "EN_ROUTE" || state.sim.mode === "AVOIDING" || state.sim.mode === "RTH")) {
+          _cDes.set(simInternal.dronePos.x - 10, simInternal.dronePos.y + 8.5, simInternal.dronePos.z + 12);
+          camera.position.lerp(_cDes, 1 - Math.exp(-3.5 * dt));
+          controls.target.lerp(droneGroup.position, 1 - Math.exp(-5 * dt));
+        } else if (state.sim.cameraPreset === "fpv") {
+          _cDes.set(simInternal.dronePos.x, simInternal.dronePos.y + 0.35, simInternal.dronePos.z);
+          camera.position.lerp(_cDes, 1 - Math.exp(-10 * dt));
+          _lDes.set(simInternal.dronePos.x + Math.sin(droneGroup.rotation.y) * 12, simInternal.dronePos.y - 1.5, simInternal.dronePos.z + Math.cos(droneGroup.rotation.y) * 12);
+          controls.target.lerp(_lDes, 1 - Math.exp(-10 * dt));
+        } else if (simInternal.camPending && state.sim.cameraPreset === "overview") {
+          _cDes.set(0, 40, 34); _lDes.set(0, 0, 0);
+          camera.position.lerp(_cDes, 1 - Math.exp(-4 * dt));
+          controls.target.lerp(_lDes, 1 - Math.exp(-4 * dt));
+          if (camera.position.distanceTo(_cDes) < 0.5) simInternal.camPending = false;
+        }
+        controls.update();
+      }
+
+      renderer.render(scene, camera);
+
+      hudAcc += dt;
+      if (hudAcc >= 0.14) {
+        hudAcc = 0;
+        var totM = Math.max(1, simInternal.path.totalDistanceM);
+        state.sim.liveSpeedMs = spd;
+        state.sim.remainingM = Math.max(0, Math.round((totM - state.sim.traveledM) * 10) / 10);
+        state.sim.progressPct = state.sim.mode === "COMPLETED" ? 100 : Math.min(99, Math.round((state.sim.traveledM / totM) * 1000) / 10);
+        state.sim.gridPos = worldToGridPt(simInternal.dronePos.x, simInternal.dronePos.z);
+        syncLiveHudDom();
+      }
+
+      if (isSoftwareGl) rafId = setTimeout(tick, 75);
+      else rafId = requestAnimationFrame(tick);
+    }
+
+    rafId = isSoftwareGl ? setTimeout(tick, 40) : requestAnimationFrame(tick);
+
+    function handleResize() {
+      if (!mountEl || disposed) return;
+      var nw = mountEl.clientWidth || 1000, nh = mountEl.clientHeight || 580;
+      camera.aspect = nw / nh; camera.updateProjectionMatrix(); renderer.setSize(nw, nh);
+    }
+    window.addEventListener("resize", handleResize);
+
+    simEngine = {
+      mountEl: mountEl,
+      resize: handleResize,
+      rebuild: function (newPath) {
+        if (newPath) { simInternal.prevPath = simInternal.path; simInternal.path = newPath; simInternal.wpIdx = 1; }
+        else { simInternal.path = getActivePath(); }
+        rebuildDynamic();
+      },
+      refreshTheme: function (theme) {
+        var nextT = createTerrainTexture(theme);
+        terrainMat.map = nextT; terrainMat.needsUpdate = true;
+        populateScenery(theme);
+        simInternal.path = getActivePath();
+        simInternal.wpIdx = 1;
+        simInternal.dronePos = gridToWorldVec(state.start.x, state.start.y, state.droneSpec.altitudeM);
+        rebuildDynamic();
+      },
+      setCamera: function (preset) {
+        state.sim.cameraPreset = preset;
+        simInternal.camPending = preset === "overview";
+      },
+      resetDrone: function () {
+        simInternal.path = getActivePath();
+        simInternal.prevPath = null;
+        simInternal.wpIdx = 1;
+        simInternal.dronePos = gridToWorldVec(state.start.x, state.start.y, state.droneSpec.altitudeM);
+        rebuildDynamic();
+      },
+      dispose: function () {
+        disposed = true;
+        clearTimeout(rafId); cancelAnimationFrame(rafId);
+        window.removeEventListener("resize", handleResize);
+        renderer.dispose();
+      }
+    };
+  }
+
+  // ======================== UI ACTIONS & LIVE HUD SYNC ========================
+  function syncSidebarAndTopbar() {
+    var sec = getSelectedSector();
+    var path = getActivePath();
+    document.getElementById("sb-sector-name").textContent = sec.name;
+    document.getElementById("sb-sector-meta").textContent = "풍속 " + state.droneSpec.windSpeedMs.toFixed(1) + " m/s · 고도 " + state.droneSpec.altitudeM + " m";
+    document.getElementById("sb-mode").textContent = state.sim.mode;
+    document.getElementById("sb-dist").textContent = path.totalDistanceM + " m";
+    document.getElementById("sb-batt").textContent = state.sim.liveBatteryPct.toFixed(0) + " %";
+    document.getElementById("sb-obs").textContent = state.obstacles.length + " 개";
+
+    var curNav = NAV_ITEMS.find(function (n) { return n.id === state.activeSection; }) || NAV_ITEMS[0];
+    document.getElementById("top-section-label").textContent = curNav.label;
+    document.getElementById("top-sector-label").textContent = " · " + sec.name;
+    document.getElementById("btn-back-sim").style.display = state.activeSection !== "simulator" ? "inline-flex" : "none";
+
+    var navList = document.getElementById("nav-list");
+    navList.innerHTML = NAV_ITEMS.map(function (item) {
+      var active = item.id === state.activeSection ? " active" : "";
+      return '<button class="nav-btn' + active + '" data-nav="' + item.id + '">' +
+        '<span class="nav-icon">●</span>' +
+        '<div style="min-width:0;"><div class="nav-label">' + item.label + '</div><div class="nav-sub">' + item.subtitle + '</div></div>' +
+        '</button>';
+    }).join("");
+    navList.querySelectorAll("[data-nav]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        state.activeSection = btn.getAttribute("data-nav");
+        document.getElementById("sidebar").classList.remove("open");
+        renderActiveView();
+      });
+    });
+  }
+
+  function syncLiveHudDom() {
+    var mEl = document.getElementById("sb-mode");
+    var bEl = document.getElementById("sb-batt");
+    if (mEl) mEl.textContent = state.sim.mode;
+    if (bEl) bEl.textContent = state.sim.liveBatteryPct.toFixed(0) + " %";
+
+    var hMode = document.getElementById("hud-mode");
+    var hSpd = document.getElementById("hud-speed");
+    var hAlt = document.getElementById("hud-alt");
+    var hBat = document.getElementById("hud-batt");
+    var hPrg = document.getElementById("hud-prog");
+    var hPos = document.getElementById("hud-pos");
+    if (hMode) hMode.textContent = state.sim.mode;
+    if (hSpd) hSpd.textContent = state.sim.liveSpeedMs.toFixed(1) + " m/s";
+    if (hAlt) hAlt.textContent = state.droneSpec.altitudeM + " m";
+    if (hBat) hBat.textContent = state.sim.liveBatteryPct.toFixed(1) + " %";
+    if (hPrg) hPrg.textContent = state.sim.progressPct.toFixed(0) + " %";
+    if (hPos) hPos.textContent = "(" + state.sim.gridPos.x + ", " + state.sim.gridPos.y + ")";
+  }
+
+  function updateSimHudBanner(msg) {
+    var el = document.getElementById("sim-event-banner");
+    if (el) {
+      el.textContent = msg;
+      el.style.display = msg ? "block" : "none";
+    }
+  }
+
+  function addObstacleAndReroute(pt, isDynamic) {
+    var newObs = {
+      id: "obs-" + Date.now() + "-" + Math.floor(Math.random() * 999),
+      name: isDynamic ? "돌발 출현 장애물 (" + pt.x + "," + pt.y + ")" : "수동 배치 장애물 (" + pt.x + "," + pt.y + ")",
+      category: isDynamic ? "other" : "building",
+      x: Math.max(0, Math.min(GRID_COLS - 1, pt.x)),
+      y: Math.max(0, Math.min(GRID_ROWS - 1, pt.y)),
+      radius: isDynamic ? 1.25 : 1.15,
+      heightM: isDynamic ? 50 : 42,
+      riskLevel: isDynamic ? "high" : "medium",
+      source: isDynamic ? "dynamic-sim" : "manual"
+    };
+    state.obstacles.push(newObs);
+    var curGrid = state.sim.gridPos || state.start;
+    var nextPath = (state.sim.mode === "EN_ROUTE" || state.sim.mode === "AVOIDING" || state.sim.mode === "RTH")
+      ? planAStarPath(curGrid, state.sim.mode === "RTH" ? state.start : state.goal, state.obstacles, state.droneSpec, { safetyMarginCells: 0.55 })
+      : getActivePath();
+    if (state.sim.mode === "EN_ROUTE") state.sim.mode = "AVOIDING";
+    if (simEngine) simEngine.rebuild(nextPath);
+    updateSimHudBanner("장애물 추가 감지 → A* 우회 경로 재계산 완료 (" + nextPath.totalDistanceM + "m)");
+    syncSidebarAndTopbar();
+    if (state.activeSection === "simulator") renderObstaclePills();
+  }
+
+  function triggerScenario(eventType) {
+    var prevPath = getActivePath();
+    var midIdx = Math.max(1, Math.min(prevPath.waypoints.length - 2, Math.floor(prevPath.waypoints.length * 0.45)));
+    var droneMid = prevPath.waypoints[midIdx] || state.start;
+    var newMode = "AVOIDING", title = "", nextPath = prevPath;
+
+    if (eventType === "sudden_obstacle") {
+      title = "돌발 장애물 출현 우회 대응";
+      var ahead = prevPath.waypoints[Math.min(prevPath.waypoints.length - 2, midIdx + 2)] || droneMid;
+      state.obstacles.push({ id: "dyn-" + Date.now(), name: "전방 돌발 크레인", category: "other", x: ahead.x, y: ahead.y, radius: 1.4, heightM: 55, riskLevel: "high", source: "dynamic-sim" });
+      nextPath = planAStarPath(droneMid, state.goal, state.obstacles, state.droneSpec, { safetyMarginCells: 0.65 });
+    } else if (eventType === "corridor_blocked") {
+      title = "비행 회랑 차단 우회 대응";
+      var blk = prevPath.waypoints[Math.min(prevPath.waypoints.length - 2, midIdx + 2)] || droneMid;
+      state.obstacles.push(
+        { id: "blk-a-" + Date.now(), name: "통제 구역 차단선 A", category: "powerline", x: blk.x, y: blk.y, radius: 1.55, heightM: 65, riskLevel: "high", source: "dynamic-sim" },
+        { id: "blk-b-" + Date.now(), name: "통제 구역 차단선 B", category: "powerline", x: Math.min(GRID_COLS - 2, blk.x + 1), y: Math.max(1, blk.y - 2), radius: 1.45, heightM: 65, riskLevel: "high", source: "dynamic-sim" }
+      );
+      nextPath = planAStarPath(droneMid, state.goal, state.obstacles, state.droneSpec, { safetyMarginCells: 0.65 });
+    } else if (eventType === "low_battery") {
+      title = "배터리 임계치 도달 — 자동 복귀(RTH)";
+      state.droneSpec.currentBatteryPct = 18;
+      state.sim.liveBatteryPct = 18;
+      newMode = "RTH";
+      nextPath = planAStarPath(droneMid, state.start, state.obstacles, state.droneSpec, { safetyMarginCells: 0.45 });
+    } else if (eventType === "high_wind") {
+      title = "강풍 돌풍 발생 — 감속 및 안정 경로 전환";
+      state.droneSpec.windSpeedMs = 14.5;
+      state.droneSpec.cruiseSpeedMs = Math.max(7, state.droneSpec.cruiseSpeedMs - 2.5);
+      nextPath = planAStarPath(droneMid, state.goal, state.obstacles, state.droneSpec, { safetyMarginCells: 0.7, windShelterBonus: true });
+    } else {
+      title = "목적지 도착 및 임무 완료";
+      newMode = "COMPLETED";
+      nextPath = planAStarPath(state.goal, state.goal, state.obstacles, state.droneSpec);
+    }
+
+    state.sim.mode = newMode;
+    var posAtEvent = eventType === "destination_reached" ? state.goal : droneMid;
+    var narrative = buildAutonomousNarrative(eventType, prevPath, nextPath, state.droneSpec, posAtEvent);
+    state.decisionHistory.unshift({
+      id: "dec-" + Date.now(),
+      timestamp: new Date().toLocaleTimeString("ko-KR"),
+      eventType: eventType,
+      title: title,
+      previousPath: prevPath,
+      recalculatedPath: nextPath,
+      dronePositionAtEvent: posAtEvent,
+      batteryPctAtEvent: state.droneSpec.currentBatteryPct,
+      windSpeedAtEvent: state.droneSpec.windSpeedMs,
+      newMode: newMode,
+      narrative: narrative
+    });
+    if (simEngine) simEngine.rebuild(nextPath);
+    showToast(title + " 시나리오를 실행하고 대응 경로를 산출했습니다.");
+    renderActiveView();
+  }
+
+  function renderObstaclePills() {
+    var host = document.getElementById("sim-obstacle-list");
+    if (!host) return;
+    host.innerHTML = state.obstacles.map(function (o) {
+      return '<div class="card-dark" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;">' +
+        '<div style="min-width:0;"><div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(o.name) + '</div>' +
+        '<div class="mono text-muted" style="font-size:11px;">(' + o.x + ',' + o.y + ') · 높이 ' + o.heightM + 'm · ' + RISK_LABELS[o.riskLevel] + '</div></div>' +
+        '<button class="btn btn-sm btn-rose" data-del-obs="' + o.id + '">삭제</button>' +
+        '</div>';
+    }).join("");
+    host.querySelectorAll("[data-del-obs]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var id = b.getAttribute("data-del-obs");
+        state.obstacles = state.obstacles.filter(function (o) { return o.id !== id; });
+        if (simEngine) simEngine.rebuild();
+        syncSidebarAndTopbar();
+        renderObstaclePills();
+      });
+    });
+  }
+
+  // ======================== 6 VIEW RENDERERS ========================
+  function renderSimulatorView(vp) {
+    var sec = getSelectedSector();
+    var path = getActivePath();
+
+    var sectorCards = REAL_WORLD_SECTORS.map(function (s) {
+      var act = s.id === state.sectorId ? " active" : "";
+      return '<button class="sector-card' + act + '" data-sector="' + s.id + '">' +
+        '<div style="font-weight:700;font-size:13px;">' + escapeHtml(s.name) + '</div>' +
+        '<div class="text-muted" style="font-size:11px;margin-top:2px;">' + escapeHtml(s.regionLabel) + '</div>' +
+        '<div class="mono text-cyan" style="font-size:11px;margin-top:6px;">풍속 ' + s.defaultWindMs + ' m/s · 고도 ' + s.defaultAltitudeM + ' m</div>' +
+        '</button>';
+    }).join("");
+
+    vp.innerHTML =
+      '<div class="section-header">' +
+        '<div><p class="section-kicker">실시간 3D 실사 비행 시뮬레이터 · 자동차·구름·수변·도시 3D 배경</p>' +
+        '<h1 class="section-title">' + escapeHtml(sec.name) + ' 자율 비행 관제</h1></div>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:8px;">' +
+          '<button id="sim-btn-play" class="btn btn-primary">' + (state.sim.mode === "EN_ROUTE" || state.sim.mode === "AVOIDING" || state.sim.mode === "RTH" ? "일시 정지" : "자율 비행 시작") + '</button>' +
+          '<button id="sim-btn-reset" class="btn">위치 초기화</button>' +
+          '<button id="sim-btn-rth" class="btn btn-rose">배터리 15% RTH 테스트</button>' +
+          '<button id="sim-btn-place" class="btn' + (state.sim.clickPlaceMode ? " active-seg" : "") + '">3D 클릭 장애물 배치 ' + (state.sim.clickPlaceMode ? "ON" : "OFF") + '</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="sector-grid">' + sectorCards + '</div>' +
+      '<div class="sim-stage-wrap">' +
+        '<div id="sim-canvas-mount"></div>' +
+        '<div class="sim-hud-top">' +
+          '<div class="hud-glass hud-telemetry-strip mono">' +
+            '<span>상태 <strong id="hud-mode" class="text-emerald">' + state.sim.mode + '</strong></span>' +
+            '<span>속도 <strong id="hud-speed" class="text-cyan">' + state.sim.liveSpeedMs.toFixed(1) + ' m/s</strong></span>' +
+            '<span>고도 <strong id="hud-alt">' + state.droneSpec.altitudeM + ' m</strong></span>' +
+            '<span>배터리 <strong id="hud-batt" class="text-amber">' + state.sim.liveBatteryPct.toFixed(1) + ' %</strong></span>' +
+            '<span>진행률 <strong id="hud-prog">' + state.sim.progressPct.toFixed(0) + ' %</strong></span>' +
+            '<span>좌표 <strong id="hud-pos">(' + state.sim.gridPos.x + ', ' + state.sim.gridPos.y + ')</strong></span>' +
+          '</div>' +
+          '<div class="hud-glass" style="display:flex;gap:6px;">' +
+            '<button class="btn btn-sm' + (state.sim.cameraPreset === "follow" ? " active-seg" : "") + '" data-cam="follow">추적 뷰</button>' +
+            '<button class="btn btn-sm' + (state.sim.cameraPreset === "overview" ? " active-seg" : "") + '" data-cam="overview">조감 뷰</button>' +
+            '<button class="btn btn-sm' + (state.sim.cameraPreset === "fpv" ? " active-seg" : "") + '" data-cam="fpv">FPV 1인칭</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="sim-hud-bottom">' +
+          '<div class="hud-glass hud-legend">' +
+            '<span><i class="hud-dot" style="background:#10B981;"></i>출발 패드</span>' +
+            '<span><i class="hud-dot" style="background:#3B82F6;"></i>목적지 패드</span>' +
+            '<span><i class="hud-dot" style="background:#06B6D4;"></i>A* 비행 경로 (' + path.totalDistanceM + 'm)</span>' +
+            '<span><i class="hud-dot" style="background:#F43F5E;"></i>고위험 장애물</span>' +
+          '</div>' +
+          '<div id="sim-event-banner" class="hud-glass text-amber" style="display:none;max-width:420px;"></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="grid grid-12">' +
+        '<div class="card col-7">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+            '<strong style="font-size:14px;">실시간 비행 환경 제어판</strong>' +
+            '<span class="mono text-muted" style="font-size:11.5px;">A* 경로 ' + path.waypoints.length + ' WP · 예상 ' + path.estimatedFlightTimeS + 's</span>' +
+          '</div>' +
+          '<div class="grid grid-3">' +
+            '<label class="field"><span>시뮬레이션 배속 (<strong id="lbl-spd-mult" class="mono">' + state.sim.speedMult + 'x</strong>)</span>' +
+              '<input id="rng-sim-speed" type="range" min="0.5" max="3" step="0.5" value="' + state.sim.speedMult + '"/></label>' +
+            '<label class="field"><span>비행 고도 (<strong id="lbl-alt-m" class="mono">' + state.droneSpec.altitudeM + ' m</strong>)</span>' +
+              '<input id="rng-alt" type="range" min="20" max="110" step="2" value="' + state.droneSpec.altitudeM + '"/></label>' +
+            '<label class="field"><span>풍속 (<strong id="lbl-wind-ms" class="mono">' + state.droneSpec.windSpeedMs + ' m/s</strong>)</span>' +
+              '<input id="rng-wind" type="range" min="0" max="16" step="0.5" value="' + state.droneSpec.windSpeedMs + '"/></label>' +
+          '</div>' +
+          '<div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:8px;">' +
+            '<button class="btn btn-sm btn-amber" data-quick-ev="sudden_obstacle">전방 돌발 장애물 투입</button>' +
+            '<button class="btn btn-sm btn-rose" data-quick-ev="corridor_blocked">회랑 차단 우회 테스트</button>' +
+            '<button class="btn btn-sm" data-quick-ev="high_wind">강풍(14.5m/s) 돌풍 발생</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="card col-5">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+            '<strong style="font-size:14px;">공역 장애물 현황 (' + state.obstacles.length + '개)</strong>' +
+            '<span class="text-muted" style="font-size:11px;">3D 지면 클릭 시 실시간 추가</span>' +
+          '</div>' +
+          '<div id="sim-obstacle-list" style="display:flex;flex-direction:column;gap:8px;max-height:175px;overflow-y:auto;"></div>' +
+        '</div>' +
+      '</div>';
+
+    renderObstaclePills();
+    init3DSimulator(document.getElementById("sim-canvas-mount"));
+
+    vp.querySelectorAll("[data-sector]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var sid = btn.getAttribute("data-sector");
+        var nextSec = REAL_WORLD_SECTORS.find(function (s) { return s.id === sid; });
+        if (!nextSec) return;
+        state.sectorId = nextSec.id;
+        state.start = Object.assign({}, nextSec.start);
+        state.goal = Object.assign({}, nextSec.goal);
+        state.obstacles = nextSec.obstacles.map(function (o) { return Object.assign({}, o); });
+        state.droneSpec.windSpeedMs = nextSec.defaultWindMs;
+        state.droneSpec.windDirectionDeg = nextSec.defaultWindDirDeg;
+        state.droneSpec.altitudeM = nextSec.defaultAltitudeM;
+        state.droneSpec.currentBatteryPct = 92;
+        state.sim.mode = "STANDBY";
+        state.sim.traveledM = 0;
+        state.sim.liveBatteryPct = 92;
+        state.decisionHistory = [];
+        if (simEngine) simEngine.refreshTheme(nextSec.theme);
+        showToast("공역 '" + nextSec.name + "' 실제 환경 테마로 전환했습니다.");
+        renderActiveView();
+      });
+    });
+
+    vp.querySelectorAll("[data-cam]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var preset = btn.getAttribute("data-cam");
+        if (simEngine) simEngine.setCamera(preset);
+        vp.querySelectorAll("[data-cam]").forEach(function (b) { b.classList.remove("active-seg"); });
+        btn.classList.add("active-seg");
+      });
+    });
+
+    document.getElementById("sim-btn-play").addEventListener("click", function () {
+      if (state.sim.mode === "EN_ROUTE" || state.sim.mode === "AVOIDING" || state.sim.mode === "RTH") {
+        state.sim.mode = "PAUSED";
+      } else {
+        if (state.sim.mode === "COMPLETED") {
+          state.sim.traveledM = 0;
+          state.sim.liveBatteryPct = state.droneSpec.currentBatteryPct;
+          if (simEngine) simEngine.resetDrone();
+        }
+        state.sim.mode = "EN_ROUTE";
+      }
+      renderActiveView();
+    });
+
+    document.getElementById("sim-btn-reset").addEventListener("click", function () {
+      state.sim.mode = "STANDBY";
+      state.sim.traveledM = 0;
+      state.sim.progressPct = 0;
+      state.sim.liveBatteryPct = state.droneSpec.currentBatteryPct;
+      if (simEngine) simEngine.resetDrone();
+      updateSimHudBanner("");
+      renderActiveView();
+    });
+
+    document.getElementById("sim-btn-rth").addEventListener("click", function () {
+      state.droneSpec.currentBatteryPct = 15;
+      state.sim.liveBatteryPct = 15;
+      if (state.sim.mode === "STANDBY" || state.sim.mode === "COMPLETED") state.sim.mode = "EN_ROUTE";
+      var curG = state.sim.gridPos || state.start;
+      var rthPath = planAStarPath(curG, state.start, state.obstacles, state.droneSpec, { safetyMarginCells: 0.45 });
+      state.sim.mode = "RTH";
+      if (simEngine) simEngine.rebuild(rthPath);
+      updateSimHudBanner("배터리 15% 저전력 임계치 도달 → 출발지(Home) 자동 복귀(RTH) 활성화");
+      syncLiveHudDom();
+    });
+
+    document.getElementById("sim-btn-place").addEventListener("click", function () {
+      state.sim.clickPlaceMode = !state.sim.clickPlaceMode;
+      renderActiveView();
+      if (state.sim.clickPlaceMode) showToast("3D 지형을 클릭하면 해당 좌표에 장애물을 배치하고 즉시 우회 경로를 탐색합니다.");
+    });
+
+    document.getElementById("rng-sim-speed").addEventListener("input", function (e) {
+      state.sim.speedMult = Number(e.target.value);
+      document.getElementById("lbl-spd-mult").textContent = state.sim.speedMult + "x";
+    });
+    document.getElementById("rng-alt").addEventListener("input", function (e) {
+      state.droneSpec.altitudeM = Number(e.target.value);
+      document.getElementById("lbl-alt-m").textContent = state.droneSpec.altitudeM + " m";
+      if (simEngine) simEngine.rebuild();
+      syncSidebarAndTopbar();
+    });
+    document.getElementById("rng-wind").addEventListener("input", function (e) {
+      state.droneSpec.windSpeedMs = Number(e.target.value);
+      document.getElementById("lbl-wind-ms").textContent = state.droneSpec.windSpeedMs + " m/s";
+      syncSidebarAndTopbar();
+    });
+
+    vp.querySelectorAll("[data-quick-ev]").forEach(function (b) {
+      b.addEventListener("click", function () { triggerScenario(b.getAttribute("data-quick-ev")); });
+    });
+  }
+
+  function renderEnvironmentView(vp) {
+    var res = state.vision.result && state.vision.result.imageSrc === state.vision.selectedSrc ? state.vision.result : null;
+    var activeObs = res ? res.obstacles : [];
+    var selObs = activeObs.find(function (o) { return o.id === state.vision.selectedObsId; }) || activeObs[0] || null;
+
+    var samplesHtml = SAMPLE_AERIAL_IMAGES.map(function (s) {
+      var act = state.vision.selectedSrc === s.src ? " active-seg" : "";
+      return '<button class="btn' + act + '" data-sample="' + s.id + '">' + escapeHtml(s.title) + '</button>';
+    }).join("");
+
+    var boxesSvg = activeObs.map(function (o) {
+      var col = o.riskLevel === "high" ? "#F43F5E" : o.riskLevel === "medium" ? "#FBBF24" : "#22D3EE";
+      var isSel = selObs && selObs.id === o.id;
+      var x = o.xmin, y = o.ymin, w = Math.max(20, o.xmax - o.xmin), h = Math.max(20, o.ymax - o.ymin);
+      return '<g class="vbox" data-vid="' + o.id + '" style="cursor:pointer;">' +
+        '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="' + col + '" fill-opacity="' + (isSel ? "0.24" : "0.1") + '" stroke="' + col + '" stroke-width="' + (isSel ? "4" : "2.5") + '"/>' +
+        '<rect x="' + x + '" y="' + Math.max(0, y - 28) + '" width="' + Math.min(340, o.label.length * 17 + 22) + '" height="26" fill="#070A12" fill-opacity="0.88"/>' +
+        '<text x="' + (x + 8) + '" y="' + Math.max(18, y - 10) + '" fill="' + col + '" font-size="18" font-weight="700" font-family="Plus Jakarta Sans, sans-serif">' + escapeHtml(o.label) + '</text>' +
+        '</g>';
+    }).join("");
+
+    vp.innerHTML =
+      '<div class="section-header">' +
+        '<div><p class="section-kicker">주변 환경 인식 · 항공 영상 장애물 탐지 및 공역 투영</p>' +
+        '<h1 class="section-title">드론 주변 환경 분석</h1></div>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:8px;">' +
+          '<label class="btn" style="cursor:pointer;">항공 사진 업로드<input id="vision-file-input" type="file" accept="image/jpeg,image/png,image/webp" style="display:none;"/></label>' +
+          '<button id="btn-run-vision" class="btn btn-primary">주변 장애물 분석 실행</button>' +
+          (activeObs.length ? '<button id="btn-project-vision" class="btn btn-emerald">확인된 장애물을 비행 지도에 반영</button>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">' + samplesHtml + '</div>' +
+      '<div class="grid grid-12">' +
+        '<div class="card col-7">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+            '<strong>' + escapeHtml(state.vision.selectedName) + '</strong>' +
+            '<span class="text-muted" style="font-size:11.5px;">인식 객체 ' + activeObs.length + '개 (사각형 클릭 시 수정)</span>' +
+          '</div>' +
+          '<div class="vision-stage">' +
+            '<img src="' + state.vision.selectedSrc + '" alt="항공 환경 이미지"/>' +
+            '<svg class="vision-svg" viewBox="0 0 1000 1000" preserveAspectRatio="none">' + boxesSvg + '</svg>' +
+          '</div>' +
+          (res ? '<div class="card-dark" style="margin-top:12px;font-size:12px;line-height:1.6;">' +
+            '<div><strong class="text-cyan">종합 환경 요약:</strong> ' + escapeHtml(res.overallRiskSummary) + '</div>' +
+            '<div><strong class="text-emerald">추천 비행 방향:</strong> ' + escapeHtml(res.recommendedFlightDirection) + '</div>' +
+            '<div class="text-muted" style="margin-top:4px;font-size:11px;">※ ' + escapeHtml(res.sensorCaveat) + '</div>' +
+            '</div>' : '<div class="card-dark text-muted" style="margin-top:12px;font-size:12px;">상단 <strong>주변 장애물 분석 실행</strong> 버튼을 누르면 이미지 속 건물·나무·전선·차량·인원을 탐지합니다.</div>') +
+        '</div>' +
+        '<div class="card col-5">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+            '<strong>탐지된 장애물 확인 및 수정</strong>' +
+            '<button id="btn-add-vision-obs" class="btn btn-sm">+ 수동 추가</button>' +
+          '</div>' +
+          (selObs ? '<div class="card-dark" style="margin-bottom:12px;display:flex;flex-direction:column;gap:8px;">' +
+            '<label class="field"><span>장애물 이름</span><input id="ed-v-label" type="text" value="' + escapeHtml(selObs.label) + '"/></label>' +
+            '<div class="grid grid-2">' +
+              '<label class="field"><span>분류</span><select id="ed-v-cat">' +
+                Object.keys(CATEGORY_LABELS).map(function (k) { return '<option value="' + k + '"' + (selObs.category === k ? ' selected' : '') + '>' + CATEGORY_LABELS[k] + '</option>'; }).join("") +
+              '</select></label>' +
+              '<label class="field"><span>위험도</span><select id="ed-v-risk">' +
+                Object.keys(RISK_LABELS).map(function (k) { return '<option value="' + k + '"' + (selObs.riskLevel === k ? ' selected' : '') + '>' + RISK_LABELS[k] + '</option>'; }).join("") +
+              '</select></label>' +
+            '</div>' +
+            '<div style="font-size:11.5px;color:#CBD5E1;">위치: ' + escapeHtml(selObs.relativePosition) + ' · 위험 분석: ' + escapeHtml(selObs.riskReason) + '</div>' +
+            '<div style="display:flex;gap:8px;"><button id="btn-save-v-edit" class="btn btn-sm btn-primary">수정 적용</button><button id="btn-del-v-obs" class="btn btn-sm btn-rose">삭제</button></div>' +
+          '</div>' : '') +
+          '<div style="display:flex;flex-direction:column;gap:8px;max-height:280px;overflow-y:auto;">' +
+            (activeObs.length ? activeObs.map(function (o) {
+              var isSel = selObs && selObs.id === o.id;
+              return '<button class="card-dark" data-pick-v="' + o.id + '" style="text-align:left;border-color:' + (isSel ? "#06B6D4" : "#1E293B") + ';">' +
+                '<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:600;"><span>' + escapeHtml(o.label) + '</span><span class="mono">' + RISK_LABELS[o.riskLevel] + '</span></div>' +
+                '<div class="text-muted" style="font-size:11px;margin-top:2px;">' + CATEGORY_LABELS[o.category] + ' · ' + escapeHtml(o.relativePosition) + '</div>' +
+              '</button>';
+            }).join("") : '<div class="text-muted" style="font-size:12px;">아직 분석 결과가 없습니다.</div>') +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    vp.querySelectorAll("[data-sample]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var found = SAMPLE_AERIAL_IMAGES.find(function (s) { return s.id === b.getAttribute("data-sample"); });
+        if (found) { state.vision.selectedSrc = found.src; state.vision.selectedName = found.title; state.vision.selectedObsId = null; renderActiveView(); }
+      });
+    });
+
+    document.getElementById("vision-file-input").addEventListener("change", function (e) {
+      var f = e.target.files[0];
+      if (!f) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        state.vision.selectedSrc = String(reader.result);
+        state.vision.selectedName = f.name;
+        state.vision.selectedObsId = null;
+        renderActiveView();
+      };
+      reader.readAsDataURL(f);
+    });
+
+    document.getElementById("btn-run-vision").addEventListener("click", function () {
+      analyzeAerialImagePixels(state.vision.selectedSrc, state.vision.selectedName, function (result) {
+        state.vision.result = result;
+        state.vision.selectedObsId = result.obstacles[0] ? result.obstacles[0].id : null;
+        showToast("항공 영상에서 " + result.obstacles.length + "개 장애물을 식별했습니다.");
+        renderActiveView();
+      });
+    });
+
+    if (document.getElementById("btn-project-vision")) {
+      document.getElementById("btn-project-vision").addEventListener("click", function () {
+        state.obstacles = projectVisionObstaclesToMap(activeObs, state.start, state.goal);
+        if (simEngine) simEngine.rebuild();
+        state.activeSection = "simulator";
+        showToast(state.obstacles.length + "개 장애물을 3D 시뮬레이터 공역에 반영하고 A* 경로를 갱신했습니다.");
+        renderActiveView();
+      });
+    }
+
+    document.getElementById("btn-add-vision-obs").addEventListener("click", function () {
+      if (!res) {
+        state.vision.result = { imageSrc: state.vision.selectedSrc, imageName: state.vision.selectedName, analyzedAt: new Date().toLocaleTimeString("ko-KR"), projectedToMap: false, obstacles: [], cautionZones: [], recommendedFlightDirection: "사용자 수동 지정", overallRiskSummary: "수동 추가 장애물 목록", sensorCaveat: "이미지 상대 좌표 기준" };
+      }
+      var item = { id: "man-" + Date.now(), label: "사용자 지정 장애물", category: "other", ymin: 350, xmin: 380, ymax: 560, xmax: 580, relativePosition: "화면 중앙부", riskLevel: "medium", riskReason: "수동 추가 주의 대상", suggestedAction: "안전 이격 통과" };
+      state.vision.result.obstacles.push(item);
+      state.vision.selectedObsId = item.id;
+      renderActiveView();
+    });
+
+    vp.querySelectorAll("[data-vid], [data-pick-v]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        state.vision.selectedObsId = el.getAttribute("data-vid") || el.getAttribute("data-pick-v");
+        renderActiveView();
+      });
+    });
+
+    if (selObs && document.getElementById("btn-save-v-edit")) {
+      document.getElementById("btn-save-v-edit").addEventListener("click", function () {
+        selObs.label = document.getElementById("ed-v-label").value || selObs.label;
+        selObs.category = document.getElementById("ed-v-cat").value;
+        selObs.riskLevel = document.getElementById("ed-v-risk").value;
+        showToast("장애물 정보를 수정했습니다.");
+        renderActiveView();
+      });
+      document.getElementById("btn-del-v-obs").addEventListener("click", function () {
+        state.vision.result.obstacles = state.vision.result.obstacles.filter(function (o) { return o.id !== selObs.id; });
+        state.vision.selectedObsId = null;
+        renderActiveView();
+      });
+    }
+  }
+
+  function renderPlanningView(vp) {
+    var path = getActivePath();
+    var perf = computeEffectiveFlightMetrics(state.droneSpec);
+
+    vp.innerHTML =
+      '<div class="section-header">' +
+        '<div><p class="section-kicker">A* 8방향 경로 탐색 및 항공 역학 · 배터리 성능 설계</p>' +
+        '<h1 class="section-title">자율 비행 경로 설계 및 성능 분석</h1></div>' +
+        '<div style="display:flex;gap:8px;">' +
+          '<button class="btn btn-sm' + (state.planningEditMode === "obstacle" ? " active-seg" : "") + '" data-pm="obstacle">클릭: 장애물 추가</button>' +
+          '<button class="btn btn-sm' + (state.planningEditMode === "start" ? " active-seg" : "") + '" data-pm="start">클릭: 출발지(S)</button>' +
+          '<button class="btn btn-sm' + (state.planningEditMode === "goal" ? " active-seg" : "") + '" data-pm="goal">클릭: 목적지(G)</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="grid grid-12">' +
+        '<div class="card col-7">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+            '<strong>2D 전술 공역 지도 (600m × 400m · 드래그 편집 가능)</strong>' +
+            '<span class="mono ' + (path.reachable ? "text-emerald" : "text-rose") + '" style="font-size:12px;">' + (path.reachable ? "경로 탐색 성공" : "경로 차단") + '</span>' +
+          '</div>' +
+          '<div id="planning-map-host"></div>' +
+          '<div class="grid grid-4" style="margin-top:12px;">' +
+            '<div class="card-dark"><div class="text-muted" style="font-size:11px;">예상 이동 거리</div><div class="mono" style="font-size:16px;font-weight:700;">' + path.totalDistanceM + ' m</div></div>' +
+            '<div class="card-dark"><div class="text-muted" style="font-size:11px;">예상 비행 시간</div><div class="mono text-cyan" style="font-size:16px;font-weight:700;">' + path.estimatedFlightTimeS + ' s</div></div>' +
+            '<div class="card-dark"><div class="text-muted" style="font-size:11px;">장애물 회피 / 이격</div><div class="mono text-emerald" style="font-size:16px;font-weight:700;">' + path.avoidanceCount + '개 · ' + path.minClearanceM + 'm</div></div>' +
+            '<div class="card-dark"><div class="text-muted" style="font-size:11px;">예상 배터리 소모</div><div class="mono text-amber" style="font-size:16px;font-weight:700;">' + path.batteryRequiredPct + ' %</div></div>' +
+          '</div>' +
+          '<div class="card-dark" style="margin-top:10px;font-size:12px;"><strong>경로 위험 요소:</strong> ' + path.riskFactors.map(escapeHtml).join(" · ") + '</div>' +
+        '</div>' +
+        '<div class="card col-5">' +
+          '<strong style="display:block;margin-bottom:10px;">드론 제원 및 비행 환경 입력 (실시간 추정 계산)</strong>' +
+          '<div class="grid grid-2" style="gap:10px;">' +
+            '<label class="field"><span>기체 무게 (kg)</span><input type="number" step="0.1" min="0.3" max="25" data-spec="massKg" value="' + state.droneSpec.massKg + '"/></label>' +
+            '<label class="field"><span>배터리 용량 (Ah)</span><input type="number" step="0.2" min="0.5" max="30" data-spec="batteryCapacityAh" value="' + state.droneSpec.batteryCapacityAh + '"/></label>' +
+            '<label class="field"><span>배터리 전압 (V)</span><input type="number" step="0.2" min="7.4" max="50" data-spec="batteryVoltageV" value="' + state.droneSpec.batteryVoltageV + '"/></label>' +
+            '<label class="field"><span>순항 속도 (m/s)</span><input type="number" step="0.5" min="3" max="25" data-spec="cruiseSpeedMs" value="' + state.droneSpec.cruiseSpeedMs + '"/></label>' +
+            '<label class="field"><span>비행 고도 (m)</span><input type="number" step="2" min="10" max="150" data-spec="altitudeM" value="' + state.droneSpec.altitudeM + '"/></label>' +
+            '<label class="field"><span>평균 소비 전력 (W)</span><input type="number" step="10" min="40" max="1500" data-spec="avgPowerW" value="' + state.droneSpec.avgPowerW + '"/></label>' +
+            '<label class="field"><span>바람 세기 (m/s)</span><input type="number" step="0.5" min="0" max="20" data-spec="windSpeedMs" value="' + state.droneSpec.windSpeedMs + '"/></label>' +
+            '<label class="field"><span>현재 배터리 (%)</span><input type="number" step="1" min="5" max="100" data-spec="currentBatteryPct" value="' + state.droneSpec.currentBatteryPct + '"/></label>' +
+          '</div>' +
+          '<div class="grid grid-2" style="margin-top:12px;">' +
+            '<div class="card-dark"><div class="text-muted" style="font-size:11px;">배터리 에너지 (V×Ah)</div><div class="mono text-cyan" style="font-size:16px;font-weight:700;">' + perf.nominalEnergyWh + ' Wh</div></div>' +
+            '<div class="card-dark"><div class="text-muted" style="font-size:11px;">유효 비행 시간 / 거리</div><div class="mono text-emerald" style="font-size:16px;font-weight:700;">' + perf.effectiveFlightTimeMin + '분 · ' + perf.estimatedRangeM + 'm</div></div>' +
+          '</div>' +
+          '<div class="text-muted" style="font-size:11px;margin-top:6px;">※ 기체 무게·풍속·고도 부하를 반영한 공학 추정값입니다.</div>' +
+          '<div style="margin-top:12px;"><div style="font-size:12px;font-weight:600;margin-bottom:4px;">배터리 잔량 감소 곡선 (%)</div><canvas id="plan-decay-chart" style="width:100%;height:160px;"></canvas></div>' +
+        '</div>' +
+      '</div>';
+
+    vp.querySelectorAll("[data-pm]").forEach(function (b) {
+      b.addEventListener("click", function () { state.planningEditMode = b.getAttribute("data-pm"); renderActiveView(); });
+    });
+    vp.querySelectorAll("[data-spec]").forEach(function (inp) {
+      inp.addEventListener("change", function () {
+        var key = inp.getAttribute("data-spec");
+        var v = Number(inp.value);
+        if (!isFinite(v) || v < 0) return;
+        state.droneSpec[key] = v;
+        if (key === "currentBatteryPct") state.sim.liveBatteryPct = v;
+        renderActiveView();
+      });
+    });
+
+    renderTacticalMapSVG(document.getElementById("planning-map-host"), {
+      start: state.start, goal: state.goal, obstacles: state.obstacles, path: path, interactive: true,
+      onGridClick: function (pt) {
+        if (state.planningEditMode === "start") state.start = pt;
+        else if (state.planningEditMode === "goal") state.goal = pt;
+        else addObstacleAndReroute(pt, false);
+        renderActiveView();
+      },
+      onMoveStart: function (pt) { state.start = pt; renderActiveView(); },
+      onMoveGoal: function (pt) { state.goal = pt; renderActiveView(); },
+      onMoveObs: function (id, pt) {
+        state.obstacles.forEach(function (o) { if (o.id === id) { o.x = pt.x; o.y = pt.y; } });
+        renderActiveView();
+      }
+    });
+
+    drawLineAreaChart(
+      document.getElementById("plan-decay-chart"),
+      perf.batteryDecayCurve.map(function (p) { return p.minute + "m"; }),
+      [{ data: perf.batteryDecayCurve.map(function (p) { return p.batteryPct; }), color: "#06B6D4", fill: "rgba(6,182,212,0.16)" }],
+      "%"
+    );
+  }
+
+  function renderControlView(vp) {
+    var latest = state.decisionHistory[0] || null;
+    var activePath = getActivePath();
+    var btns = [
+      { type: "sudden_obstacle", label: "돌발 장애물 출현", desc: "전방 미확인 크레인/비행체 출현 시 즉시 우회" },
+      { type: "corridor_blocked", label: "기존 경로 완전 차단", desc: "통제 구역 형성 시 대체 회랑 재탐색" },
+      { type: "low_battery", label: "배터리 임계치 부족", desc: "18% 도달 시 출발지 자동 복귀(RTH)" },
+      { type: "high_wind", label: "강풍 돌풍 발생 (14.5m/s)", desc: "속도 감속 및 풍하중 보정 경로 재계산" },
+      { type: "destination_reached", label: "목적지 도착 및 착륙", desc: "최종 좌표 도달 및 안전 착륙 완료" }
+    ];
+
+    vp.innerHTML =
+      '<div class="section-header">' +
+        '<div><p class="section-kicker">비행 중 상황 변화 인식 및 자율 경로 재계산</p>' +
+        '<h1 class="section-title">자율 비행 상황 판단 제어 센터</h1></div>' +
+        '<button id="btn-go-sim-ctrl" class="btn btn-primary">대응 경로로 3D 시뮬레이터 실행</button>' +
+      '</div>' +
+      '<div class="grid grid-5" style="margin-bottom:16px;">' +
+        btns.map(function (b) {
+          return '<button class="card" data-ctrl-ev="' + b.type + '" style="text-align:left;">' +
+            '<div style="font-weight:700;font-size:13px;color:#F8FAFC;">' + b.label + '</div>' +
+            '<div class="text-muted" style="font-size:11.5px;margin-top:6px;">' + b.desc + '</div>' +
+            '</button>';
+        }).join("") +
+      '</div>' +
+      '<div class="grid grid-12">' +
+        '<div class="card col-7">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+            '<strong>이전 경로(주황 점선) vs 자율 대응 경로(청록 실선)</strong>' +
+            (latest ? '<span class="mono text-cyan" style="font-size:12px;">상태 → ' + latest.newMode + '</span>' : '') +
+          '</div>' +
+          '<div id="ctrl-map-host"></div>' +
+          (latest ? '<div class="grid grid-4" style="margin-top:12px;">' +
+            '<div class="card-dark"><div class="text-muted" style="font-size:11px;">거리 변화</div><div class="mono" style="font-weight:700;">' + latest.previousPath.totalDistanceM + 'm → <span class="text-cyan">' + latest.recalculatedPath.totalDistanceM + 'm</span></div></div>' +
+            '<div class="card-dark"><div class="text-muted" style="font-size:11px;">시간 변화</div><div class="mono" style="font-weight:700;">' + latest.previousPath.estimatedFlightTimeS + 's → <span class="text-cyan">' + latest.recalculatedPath.estimatedFlightTimeS + 's</span></div></div>' +
+            '<div class="card-dark"><div class="text-muted" style="font-size:11px;">이벤트 배터리</div><div class="mono text-amber" style="font-weight:700;">' + latest.batteryPctAtEvent.toFixed(1) + ' %</div></div>' +
+            '<div class="card-dark"><div class="text-muted" style="font-size:11px;">적용 풍속</div><div class="mono" style="font-weight:700;">' + latest.windSpeedAtEvent.toFixed(1) + ' m/s</div></div>' +
+          '</div>' : '') +
+        '</div>' +
+        '<div class="card col-5">' +
+          '<strong style="display:block;margin-bottom:10px;">자율 비행 판단 및 대응 보고서</strong>' +
+          (latest ? '<div class="card-dark" style="display:flex;flex-direction:column;gap:8px;font-size:12.5px;line-height:1.55;">' +
+            '<div style="display:flex;justify-content:space-between;"><strong class="text-cyan">' + escapeHtml(latest.title) + '</strong><span class="mono text-muted">' + latest.timestamp + '</span></div>' +
+            '<div><strong>상황 분석:</strong> ' + escapeHtml(latest.narrative.situationAssessment) + '</div>' +
+            '<div><strong>대응 근거:</strong> ' + escapeHtml(latest.narrative.decisionRationale) + '</div>' +
+            '<div><strong>실행 계획:</strong> ' + escapeHtml(latest.narrative.executionPlan) + '</div>' +
+            '<div class="text-amber"><strong>안전 주의:</strong> ' + escapeHtml(latest.narrative.safetyNotice) + '</div>' +
+          '</div>' : '<div class="card-dark text-muted" style="padding:36px 16px;text-align:center;">상단 5가지 시나리오 버튼을 클릭하면 즉시 경로 재계산과 자율 판단 보고서를 생성합니다.</div>') +
+        '</div>' +
+      '</div>';
+
+    vp.querySelectorAll("[data-ctrl-ev]").forEach(function (b) {
+      b.addEventListener("click", function () { triggerScenario(b.getAttribute("data-ctrl-ev")); });
+    });
+    document.getElementById("btn-go-sim-ctrl").addEventListener("click", function () {
+      state.activeSection = "simulator";
+      renderActiveView();
+    });
+
+    renderTacticalMapSVG(document.getElementById("ctrl-map-host"), {
+      start: latest && latest.eventType === "low_battery" ? latest.dronePositionAtEvent : state.start,
+      goal: latest && latest.eventType === "low_battery" ? state.start : state.goal,
+      obstacles: state.obstacles,
+      path: latest ? latest.recalculatedPath : activePath,
+      previousPath: latest ? latest.previousPath : null,
+      dronePos: latest ? latest.dronePositionAtEvent : state.start,
+      interactive: false
+    });
+  }
+
+  function renderOptimizationView(vp) {
+    var w = state.optimizationWeights;
+    var candidates = evaluateMissionCandidates(state.start, state.goal, state.obstacles, state.droneSpec, w);
+    var top = candidates[0];
+    var preview = candidates.find(function (c) { return c.id === state.selectedOptId; }) || top;
+    var direct = candidates.find(function (c) { return c.id === "direct"; }) || top;
+    var exp = buildOptimizationExplanation(candidates, w);
+
+    vp.innerHTML =
+      '<div class="section-header">' +
+        '<div><p class="section-kicker">다중 기준 임무 최적화 · 안전성 · 시간 · 배터리 · 거리 비교</p>' +
+        '<h1 class="section-title">비행 임무 최적화 및 전략 비교</h1></div>' +
+        '<button id="btn-apply-opt" class="btn btn-primary">' + escapeHtml(preview.name) + ' 시뮬레이터 적용</button>' +
+      '</div>' +
+      '<div class="grid grid-12">' +
+        '<div class="card col-5">' +
+          '<strong>임무 우선순위 가중치</strong>' +
+          '<div style="display:flex;flex-direction:column;gap:12px;margin-top:12px;">' +
+            [["safety","안전성 (장애물 이격)"],["time","비행 시간 단축"],["battery","배터리 에너지 효율"],["distance","이동 거리 최소화"]].map(function (it) {
+              return '<label class="field"><div style="display:flex;justify-content:space-between;"><span>' + it[1] + '</span><strong class="mono text-cyan">' + w[it[0]] + '</strong></div>' +
+                '<input type="range" min="0" max="100" step="5" data-wkey="' + it[0] + '" value="' + w[it[0]] + '"/></label>';
+            }).join("") +
+          '</div>' +
+          '<div class="card-dark" style="margin-top:14px;border-color:rgba(6,182,212,0.5);">' +
+            '<div class="text-cyan" style="font-size:12px;font-weight:700;">' + escapeHtml(exp.headline) + '</div>' +
+            '<p style="font-size:12px;margin:6px 0;line-height:1.55;">' + escapeHtml(exp.reasoning) + '</p>' +
+            '<div class="text-amber" style="font-size:11.5px;">' + escapeHtml(exp.tradeOff) + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="card col-7">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
+            '<strong>후보 경로 미리보기 · ' + escapeHtml(preview.name) + '</strong>' +
+            '<span class="mono text-muted" style="font-size:11.5px;">거리 ' + preview.path.totalDistanceM + 'm · 시간 ' + preview.path.estimatedFlightTimeS + 's · 이격 ' + preview.path.minClearanceM + 'm</span>' +
+          '</div>' +
+          '<div id="opt-map-host"></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="grid grid-12" style="margin-top:16px;">' +
+        '<div class="card col-7">' +
+          '<strong style="display:block;margin-bottom:10px;">후보 경로 정량 비교 표 (행 클릭 시 미리보기)</strong>' +
+          '<table><thead><tr><th>순위</th><th>경로 전략</th><th>거리</th><th>시간</th><th>이격</th><th>소모</th><th>종합점수</th></tr></thead><tbody>' +
+            candidates.map(function (c, idx) {
+              var bg = preview.id === c.id ? 'background:rgba(6,182,212,0.12);' : '';
+              return '<tr data-opt-row="' + c.id + '" style="cursor:pointer;' + bg + '">' +
+                '<td class="mono">#' + (idx + 1) + '</td>' +
+                '<td style="font-weight:600;">' + escapeHtml(c.name) + '</td>' +
+                '<td class="mono">' + c.path.totalDistanceM + 'm</td>' +
+                '<td class="mono">' + c.path.estimatedFlightTimeS + 's</td>' +
+                '<td class="mono">' + c.path.minClearanceM + 'm</td>' +
+                '<td class="mono">' + c.path.batteryRequiredPct + '%</td>' +
+                '<td class="mono text-cyan" style="font-weight:700;">' + c.weightedScore + '</td></tr>';
+            }).join("") +
+          '</tbody></table>' +
+        '</div>' +
+        '<div class="card col-5">' +
+          '<strong style="display:block;margin-bottom:8px;">전략별 다차원 레이더 &amp; 점수 막대 비교</strong>' +
+          '<canvas id="opt-bar-chart" style="width:100%;height:150px;"></canvas>' +
+          '<canvas id="opt-radar-chart" style="width:100%;height:190px;margin-top:6px;"></canvas>' +
+        '</div>' +
+      '</div>';
+
+    vp.querySelectorAll("[data-wkey]").forEach(function (inp) {
+      inp.addEventListener("input", function () {
+        state.optimizationWeights[inp.getAttribute("data-wkey")] = Number(inp.value);
+        renderActiveView();
+      });
+    });
+    vp.querySelectorAll("[data-opt-row]").forEach(function (tr) {
+      tr.addEventListener("click", function () {
+        state.selectedOptId = tr.getAttribute("data-opt-row");
+        renderActiveView();
+      });
+    });
+    document.getElementById("btn-apply-opt").addEventListener("click", function () {
+      state.astarOptions = Object.assign({}, preview.options);
+      state.activeSection = "simulator";
+      showToast("'" + preview.name + "' 전략을 시뮬레이터에 적용했습니다.");
+      renderActiveView();
+    });
+
+    renderTacticalMapSVG(document.getElementById("opt-map-host"), { start: state.start, goal: state.goal, obstacles: state.obstacles, path: preview.path, heightPx: 290 });
+    drawBarComparisonChart(document.getElementById("opt-bar-chart"), candidates);
+    drawRadarComparisonChart(document.getElementById("opt-radar-chart"), top, direct);
+  }
+
+  function renderDashboardView(vp) {
+    var path = getActivePath();
+    var perf = computeEffectiveFlightMetrics(state.droneSpec);
+
+    vp.innerHTML =
+      '<div class="section-header">' +
+        '<div><p class="section-kicker">통합 관제 요약 · 상태 · 배터리 · 경로 진행률</p>' +
+        '<h1 class="section-title">SKY-GUARD 임무 관제 대시보드</h1></div>' +
+        '<button id="btn-dash-sim" class="btn btn-primary">3D 시뮬레이터 열기</button>' +
+      '</div>' +
+      '<div class="grid grid-4" style="margin-bottom:16px;">' +
+        '<div class="card"><div class="text-muted" style="font-size:11.5px;">드론 상태</div><div class="mono text-emerald" style="font-size:20px;font-weight:700;margin-top:4px;">' + state.sim.mode + '</div><div class="text-muted" style="font-size:11px;margin-top:4px;">좌표 (' + state.sim.gridPos.x + ', ' + state.sim.gridPos.y + ')</div></div>' +
+        '<div class="card"><div class="text-muted" style="font-size:11.5px;">배터리 잔량</div><div class="mono text-cyan" style="font-size:20px;font-weight:700;margin-top:4px;">' + state.sim.liveBatteryPct.toFixed(1) + ' %</div><div class="text-muted" style="font-size:11px;margin-top:4px;">총 용량 ' + perf.nominalEnergyWh + ' Wh · 잔여 약 ' + perf.effectiveFlightTimeMin + '분</div></div>' +
+        '<div class="card"><div class="text-muted" style="font-size:11.5px;">비행 속도 / 고도</div><div class="mono" style="font-size:20px;font-weight:700;margin-top:4px;">' + perf.effectiveGroundSpeedMs + ' m/s · ' + state.droneSpec.altitudeM + ' m</div><div class="text-muted" style="font-size:11px;margin-top:4px;">풍속 ' + state.droneSpec.windSpeedMs + ' m/s 반영</div></div>' +
+        '<div class="card"><div class="text-muted" style="font-size:11.5px;">이동 거리 / 장애물</div><div class="mono text-amber" style="font-size:20px;font-weight:700;margin-top:4px;">' + state.sim.traveledM.toFixed(0) + ' / ' + path.totalDistanceM + ' m</div><div class="text-muted" style="font-size:11px;margin-top:4px;">감지 장애물 ' + state.obstacles.length + '개</div></div>' +
+      '</div>' +
+      '<div class="card" style="margin-bottom:16px;">' +
+        '<div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:8px;"><strong>임무 진행률</strong><strong class="mono text-cyan">' + state.sim.progressPct.toFixed(1) + ' %</strong></div>' +
+        '<div class="progress-track"><div class="progress-fill" style="width:' + state.sim.progressPct + '%;"></div></div>' +
+      '</div>' +
+      '<div class="grid grid-12">' +
+        '<div class="card col-7"><strong style="display:block;margin-bottom:8px;">현재 공역 경로 미리보기</strong><div id="dash-map-host"></div></div>' +
+        '<div class="card col-5"><strong style="display:block;margin-bottom:8px;">배터리 잔량 감소 예측</strong><canvas id="dash-decay-chart" style="width:100%;height:230px;"></canvas>' +
+          '<div class="card-dark" style="margin-top:12px;font-size:12px;"><strong>주요 위험 진단:</strong> ' + path.riskFactors.map(escapeHtml).join(" · ") + '</div>' +
+        '</div>' +
+      '</div>';
+
+    document.getElementById("btn-dash-sim").addEventListener("click", function () {
+      state.activeSection = "simulator";
+      renderActiveView();
+    });
+    renderTacticalMapSVG(document.getElementById("dash-map-host"), { start: state.start, goal: state.goal, obstacles: state.obstacles, path: path, dronePos: state.sim.gridPos, heightPx: 300 });
+    drawLineAreaChart(
+      document.getElementById("dash-decay-chart"),
+      perf.batteryDecayCurve.map(function (p) { return p.minute + "m"; }),
+      [{ data: perf.batteryDecayCurve.map(function (p) { return p.batteryPct; }), color: "#06B6D4", fill: "rgba(6,182,212,0.18)" }],
+      "%"
+    );
+  }
+
+  function renderActiveView() {
+    syncSidebarAndTopbar();
+    var vp = document.getElementById("app-viewport");
+    if (state.activeSection !== "simulator" && simEngine) {
+      simEngine.dispose();
+      simEngine = null;
+    }
+    if (state.activeSection === "simulator") renderSimulatorView(vp);
+    else if (state.activeSection === "environment") renderEnvironmentView(vp);
+    else if (state.activeSection === "planning") renderPlanningView(vp);
+    else if (state.activeSection === "control") renderControlView(vp);
+    else if (state.activeSection === "optimization") renderOptimizationView(vp);
+    else renderDashboardView(vp);
+  }
+
+  // Global Header / Sidebar Event Listeners
+  document.getElementById("mobile-menu-btn").addEventListener("click", function () {
+    document.getElementById("sidebar").classList.add("open");
+  });
+  document.getElementById("mobile-close-btn").addEventListener("click", function () {
+    document.getElementById("sidebar").classList.remove("open");
+  });
+  document.getElementById("btn-back-sim").addEventListener("click", function () {
+    state.activeSection = "simulator";
+    renderActiveView();
+  });
+  document.getElementById("btn-reset-mission").addEventListener("click", function () {
+    var sec = getSelectedSector();
+    state.start = Object.assign({}, sec.start);
+    state.goal = Object.assign({}, sec.goal);
+    state.obstacles = sec.obstacles.map(function (o) { return Object.assign({}, o); });
+    state.droneSpec.windSpeedMs = sec.defaultWindMs;
+    state.droneSpec.altitudeM = sec.defaultAltitudeM;
+    state.droneSpec.currentBatteryPct = 92;
+    state.sim.mode = "STANDBY";
+    state.sim.traveledM = 0;
+    state.sim.progressPct = 0;
+    state.sim.liveBatteryPct = 92;
+    state.decisionHistory = [];
+    if (simEngine) simEngine.resetDrone();
+    showToast("'" + sec.name + "' 기본 공역 및 드론 제원으로 초기화했습니다.");
+    renderActiveView();
+  });
+
+  // Download Single Standalone index.html File
+  document.getElementById("btn-download-html").addEventListener("click", function () {
+    function triggerBlobDownload(htmlText) {
+      var blob = new Blob([htmlText], { type: "text/html;charset=utf-8" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = "index.html";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast("단일 index.html 파일 다운로드를 시작했습니다. (더블클릭 실행 / GitHub·Vercel 즉시 배포 가능)");
+    }
+
+    if (window.location.protocol === "http:" || window.location.protocol === "https:") {
+      fetch("./index.html", { cache: "no-store" })
+        .then(function (r) { if (!r.ok) throw new Error("fetch failed"); return r.text(); })
+        .then(triggerBlobDownload)
+        .catch(function () { triggerBlobDownload(PRISTINE_HTML_SNAPSHOT); });
+    } else {
+      triggerBlobDownload(PRISTINE_HTML_SNAPSHOT);
+    }
+  });
+
+  renderActiveView();
+})();
+</script>
+</body>
+</html>
